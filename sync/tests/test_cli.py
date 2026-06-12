@@ -140,3 +140,38 @@ def test_pull_skips_when_karakeep_is_newer(tmp_path):
     assert result.exit_code == 0
     mock_client.update_bookmark.assert_not_called()
     mock_client.create_bookmark.assert_not_called()
+
+
+def test_auto_runs_pull_then_push(tmp_path):
+    config = make_config(tmp_path)
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value={}),
+        patch("karakeep_sync.cli.save_state"),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+        patch("karakeep_sync.cli.pull"),
+        patch("karakeep_sync.cli.changed_files_after_pull", return_value=[]),
+        patch("karakeep_sync.cli.commit_and_push"),
+    ):
+        MockClient.return_value.get_all_bookmarks.return_value = []
+        runner = CliRunner()
+        result = runner.invoke(cli, ["auto"])
+
+    assert result.exit_code == 0
+    assert "Pull complete" in result.output
+    assert "Push complete" in result.output
+
+
+def test_status_shows_pending_count(tmp_path):
+    config = make_config(tmp_path)
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value={}),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+    ):
+        MockClient.return_value.get_all_bookmarks.return_value = [NEW_BM]
+        runner = CliRunner()
+        result = runner.invoke(cli, ["status"])
+
+    assert result.exit_code == 0
+    assert "1" in result.output

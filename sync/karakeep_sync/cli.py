@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
+import subprocess
 import click
 
 from karakeep_sync.config import load_config
@@ -85,3 +86,55 @@ def pull_cmd() -> None:
 
     save_state(state)
     click.echo("Pull complete.")
+
+
+@cli.command()
+@click.pass_context
+def auto(ctx: click.Context) -> None:
+    """git pull → Karakeep import → Karakeep export → git push (cron용)"""
+    ctx.invoke(pull_cmd)
+    ctx.invoke(push)
+
+
+@cli.command()
+def status() -> None:
+    """동기화되지 않은 북마크 수 출력"""
+    config = load_config()
+    state = load_state()
+    client = KarakeepClient(config.karakeep_url, config.karakeep_api_key)
+    bookmarks = client.get_all_bookmarks()
+
+    pending = [
+        bm for bm in bookmarks
+        if bm.id not in state or state[bm.id].updated < bm.updated
+    ]
+    click.echo(f"Pending push: {len(pending)} bookmark(s)")
+
+
+@cli.command()
+def init() -> None:
+    """git clone + cron 등록"""
+    config = load_config()
+
+    for repo_name, repo in config.repos.items():
+        if repo.path.exists():
+            click.echo(f"[{repo_name}] Already exists: {repo.path}")
+            continue
+        click.echo(f"[{repo_name}] Cloning {repo.remote} → {repo.path}")
+        repo.path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "clone", repo.remote, str(repo.path)], check=True)
+        click.echo(f"[{repo_name}] Done.")
+
+    # cron 등록
+    sync_bin = Path(__file__).parent.parent / ".venv" / "bin" / "karakeep-sync"
+    log_path = config.log_dir / "cron.log"
+    config.log_dir.mkdir(parents=True, exist_ok=True)
+    cron_line = f"*/30 * * * * {sync_bin} auto >> {log_path} 2>&1"
+    result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+    existing = result.stdout if result.returncode == 0 else ""
+    if cron_line in existing:
+        click.echo("Cron already registered.")
+    else:
+        new_crontab = existing.rstrip("\n") + f"\n{cron_line}\n"
+        subprocess.run(["crontab", "-"], input=new_crontab, text=True, check=True)
+        click.echo(f"Cron registered: {cron_line}")
