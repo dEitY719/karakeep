@@ -78,3 +78,65 @@ def test_push_skips_imported_bookmark(tmp_path):
 
     assert result.exit_code == 0
     mock_git.assert_not_called()
+
+
+def test_pull_imports_new_bookmark(tmp_path):
+    config = make_config(tmp_path)
+    # Create an MD file in the repo path (simulating git pull result)
+    md_path = config.repos["common"].path / "abc123.md"
+    md_path.write_text(
+        "---\nid: abc123\nurl: https://example.com\ntitle: Example\n"
+        "tags: [topic/python]\ncreated: '2024-01-01T00:00:00Z'\n"
+        "updated: '2024-01-02T00:00:00Z'\nsource: karakeep\n---\n"
+    )
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value={}),
+        patch("karakeep_sync.cli.save_state") as mock_save,
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+        patch("karakeep_sync.cli.pull"),
+        patch("karakeep_sync.cli.changed_files_after_pull", return_value=[md_path]),
+    ):
+        mock_client = MockClient.return_value
+        mock_client.get_all_bookmarks.return_value = []
+        mock_client.create_bookmark.return_value = NEW_BM
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["pull"])
+
+    assert result.exit_code == 0, result.output
+    mock_client.create_bookmark.assert_called_once()
+    mock_save.assert_called_once()
+
+
+def test_pull_skips_when_karakeep_is_newer(tmp_path):
+    config = make_config(tmp_path)
+    md_path = config.repos["common"].path / "abc123.md"
+    md_path.write_text(
+        "---\nid: abc123\nurl: https://example.com\ntitle: Old\n"
+        "tags: []\ncreated: '2024-01-01T00:00:00Z'\n"
+        "updated: '2024-01-01T00:00:00Z'\nsource: karakeep\n---\n"
+    )
+    # Karakeep has newer version (2024-01-02)
+    newer_bm = Bookmark(id="abc123", url="https://example.com", title="Newer",
+                        tags=[], created="2024-01-01T00:00:00Z",
+                        updated="2024-01-02T00:00:00Z", note="")
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value={}),
+        patch("karakeep_sync.cli.save_state"),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+        patch("karakeep_sync.cli.pull"),
+        patch("karakeep_sync.cli.changed_files_after_pull", return_value=[md_path]),
+    ):
+        mock_client = MockClient.return_value
+        mock_client.get_all_bookmarks.return_value = [newer_bm]
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["pull"])
+
+    assert result.exit_code == 0
+    mock_client.update_bookmark.assert_not_called()
+    mock_client.create_bookmark.assert_not_called()

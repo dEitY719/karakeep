@@ -47,3 +47,41 @@ def push() -> None:
 
     save_state(state)
     click.echo("Push complete.")
+
+
+@cli.command(name="pull")
+def pull_cmd() -> None:
+    """git pull → Markdown → Karakeep import"""
+    config = load_config()
+    state = load_state()
+    client = KarakeepClient(config.karakeep_url, config.karakeep_api_key)
+    existing = {bm.url: bm for bm in client.get_all_bookmarks()}
+
+    for repo_name, repo in config.repos.items():
+        if not repo.pull:
+            continue
+        pull(repo.path)
+        changed_files = changed_files_after_pull(repo.path)
+
+        for md_path in changed_files:
+            if md_path.suffix != ".md":
+                continue
+            try:
+                bm = md_to_bookmark(md_path.read_text())
+            except (ValueError, KeyError):
+                continue
+
+            existing_bm = existing.get(bm.url)
+            if existing_bm is None:
+                created = client.create_bookmark(bm)
+                state[created.id] = BookmarkState(
+                    updated=bm.updated, repo=repo_name, imported=True
+                )
+            elif bm.updated > existing_bm.updated:
+                client.update_bookmark(existing_bm.id, bm)
+                state[existing_bm.id] = BookmarkState(
+                    updated=bm.updated, repo=repo_name, imported=True
+                )
+
+    save_state(state)
+    click.echo("Pull complete.")
