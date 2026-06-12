@@ -2,7 +2,7 @@ services:
   karakeep:
     image: ghcr.io/karakeep-app/karakeep:release
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       - ./data:/data
     env_file: .env

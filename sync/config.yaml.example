@@ -1,5 +1,5 @@
 karakeep:
-  url: http://localhost:3000
+  url: http://localhost:3001
   api_key: ${KARAKEEP_API_KEY}
 
 vault_root: ~/obsidian-vault/10_Bookmarks
