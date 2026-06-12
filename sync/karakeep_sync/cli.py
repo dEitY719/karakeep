@@ -106,7 +106,8 @@ def status() -> None:
 
     pending = [
         bm for bm in bookmarks
-        if bm.id not in state or state[bm.id].updated < bm.updated
+        if (bm.id not in state or state[bm.id].updated < bm.updated)
+        and not (bm.id in state and state[bm.id].imported)
     ]
     click.echo(f"Pending push: {len(pending)} bookmark(s)")
 

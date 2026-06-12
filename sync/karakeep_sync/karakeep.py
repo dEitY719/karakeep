@@ -20,9 +20,22 @@ class KarakeepClient:
         self._headers = {"Authorization": f"Bearer {api_key}"}
 
     def get_all_bookmarks(self) -> list[Bookmark]:
-        resp = httpx.get(f"{self._base}/api/v1/bookmarks", headers=self._headers)
-        resp.raise_for_status()
-        return [self._parse(item) for item in resp.json()["bookmarks"]]
+        results = []
+        cursor: str | None = None
+        while True:
+            params = {"cursor": cursor} if cursor else {}
+            resp = httpx.get(
+                f"{self._base}/api/v1/bookmarks",
+                headers=self._headers,
+                params=params,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            results.extend(self._parse(item) for item in data["bookmarks"])
+            cursor = data.get("nextCursor")
+            if not cursor:
+                break
+        return results
 
     def create_bookmark(self, bm: Bookmark) -> Bookmark:
         payload = {"url": bm.url, "title": bm.title, "note": bm.note}
@@ -30,7 +43,18 @@ class KarakeepClient:
             f"{self._base}/api/v1/bookmarks", json=payload, headers=self._headers
         )
         resp.raise_for_status()
-        return self._parse(resp.json())
+        created = self._parse(resp.json())
+        for tag in bm.tags:
+            self._attach_tag(created.id, tag)
+        return created
+
+    def _attach_tag(self, bookmark_id: str, tag_name: str) -> None:
+        resp = httpx.post(
+            f"{self._base}/api/v1/bookmarks/{bookmark_id}/tags",
+            json={"name": tag_name},
+            headers=self._headers,
+        )
+        resp.raise_for_status()
 
     def update_bookmark(self, bookmark_id: str, bm: Bookmark) -> None:
         payload = {"title": bm.title, "note": bm.note}
@@ -40,6 +64,8 @@ class KarakeepClient:
             headers=self._headers,
         )
         resp.raise_for_status()
+        for tag in bm.tags:
+            self._attach_tag(bookmark_id, tag)
 
     def _parse(self, item: dict) -> Bookmark:
         return Bookmark(
