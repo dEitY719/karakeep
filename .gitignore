@@ -1,1 +1,11 @@
 .vscode
+.env
+data/
+logs/
+sync/sync-state.json
+sync/config.yaml
+sync/.venv/
+sync/__pycache__/
+sync/**/__pycache__/
+sync/**/*.pyc
+sync/.pytest_cache/

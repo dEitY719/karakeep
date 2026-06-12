@@ -1,0 +1,19 @@
+karakeep:
+  url: http://localhost:3000
+  api_key: ${KARAKEEP_API_KEY}
+
+vault_root: ~/obsidian-vault/10_Bookmarks
+
+repos:
+  common:
+    path: Common
+    remote: https://${GITHUB_PAT}@github.com/dEitY719/bookmarks-common.git
+    pull: true
+  company:
+    path: Company
+    remote: https://${GHES_PAT}@${GHES_HOST}/dEitY719/bookmarks-company.git
+    pull: true
+
+logs:
+  dir: ~/apps/karakeep/logs
+  retention_days: 30
