@@ -3,6 +3,8 @@ import subprocess
 from pathlib import Path
 
 
+
+
 def run_git(args: list[str], cwd: Path) -> str:
     try:
         result = subprocess.run(
@@ -21,7 +23,7 @@ def run_git(args: list[str], cwd: Path) -> str:
 
 def clone(remote: str, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "clone", remote, str(path)], check=True)
+    run_git(["clone", remote, str(path)], cwd=path.parent)
 
 
 def pull(path: Path) -> None:
