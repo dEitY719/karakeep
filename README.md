@@ -10,23 +10,35 @@
 
 ## 최초 설치
 
-    # 1. Karakeep 실행
-    cp .env.example .env   # .env 편집: API key + PAT 입력
+`.env` 변수는 **사용 시점이 둘로 나뉩니다.** 컨테이너 기동에 필요한 값만 먼저
+채우고, `KARAKEEP_API_KEY`는 컨테이너를 띄운 뒤 웹 UI에서 발급해 채웁니다.
+(컨테이너는 API key를 읽지 않으므로, 발급 후 재시작 불필요)
+
+    # 1. Karakeep 실행 — 서버 변수만 먼저 채움
+    cp .env.example .env
+    #   .env 편집: NEXTAUTH_SECRET / NEXTAUTH_URL / DATA_DIR 만 입력
+    #   (KARAKEEP_API_KEY 는 비워둔 채로 진행 — 3단계에서 채움)
     docker compose up -d
 
-    # 2. sync 패키지 설치
+    # 2. API key 발급
+    #   브라우저로 http://localhost:3001 접속 → 회원가입/로그인
+    #   → Settings → API Keys 에서 키 발급
+    #   → .env 의 KARAKEEP_API_KEY= 에 붙여넣기
+    #   GitHub/GHES PAT 는 github.com/settings/tokens 등에서 미리 발급해 함께 채움
+
+    # 3. sync 패키지 설치
     cd sync
     python -m venv .venv
     source .venv/bin/activate
     pip install -e ".[dev]"
 
-    # 3. config 설정
+    # 4. config 설정
     cp config.yaml.example config.yaml   # config.yaml 편집
 
-    # 4. 초기화 (git clone + cron 등록)
+    # 5. 초기화 (git clone + cron 등록)
     karakeep-sync init
 
-    # 5. 기존 북마크 import
+    # 6. 기존 북마크 import
     karakeep-sync pull
 
 ## 일상 사용
