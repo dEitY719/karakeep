@@ -3,7 +3,10 @@ import json
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-DEFAULT_STATE_PATH = Path("~/apps/karakeep/sync/sync-state.json").expanduser()
+# sync-state.json lives in the repo's sync/ dir (= karakeep_sync/../sync-state.json),
+# matching .gitignore (sync/sync-state.json) — resolved relative to this package so it
+# works wherever the repo is checked out.
+DEFAULT_STATE_PATH = Path(__file__).resolve().parent.parent / "sync-state.json"
 
 
 @dataclass
