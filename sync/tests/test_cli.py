@@ -162,6 +162,57 @@ def test_auto_runs_pull_then_push(tmp_path):
     assert "Push complete" in result.output
 
 
+def test_init_aborts_when_vault_root_missing(tmp_path):
+    config = make_config(tmp_path)
+    config.vault_root = tmp_path / "does-not-exist"
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.subprocess.run") as mock_run,
+    ):
+        runner = CliRunner()
+        # confirm 프롬프트에 "n" 입력 → 중단
+        result = runner.invoke(cli, ["init"], input="n\n")
+
+    assert result.exit_code == 1, result.output
+    assert "존재하지 않습니다" in result.output
+    mock_run.assert_not_called()
+
+
+def test_init_warns_when_not_obsidian_vault(tmp_path):
+    config = make_config(tmp_path)  # vault_root=tmp_path 존재하지만 .obsidian 없음
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.subprocess.run") as mock_run,
+    ):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["init"], input="n\n")
+
+    assert result.exit_code == 1, result.output
+    assert ".obsidian" in result.output
+    mock_run.assert_not_called()
+
+
+def test_init_proceeds_when_obsidian_vault_present(tmp_path):
+    config = make_config(tmp_path)
+    (tmp_path / ".obsidian").mkdir()  # 진짜 vault 마커
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        runner = CliRunner()
+        result = runner.invoke(cli, ["init"])
+
+    assert result.exit_code == 0, result.output
+    # 경고/중단 없이 검증을 통과해 cron 등록 단계(subprocess.run)까지 진행됨
+    assert "존재하지 않습니다" not in result.output
+    assert "init 중단" not in result.output
+    assert mock_run.called
+
+
 def test_status_shows_pending_count(tmp_path):
     config = make_config(tmp_path)
     with (

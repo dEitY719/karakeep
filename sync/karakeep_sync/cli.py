@@ -112,10 +112,39 @@ def status() -> None:
     click.echo(f"Pending push: {len(pending)} bookmark(s)")
 
 
+def _looks_like_obsidian_vault(path: Path) -> bool:
+    """path 자신부터 home 까지 거슬러 올라가며 .obsidian/ 마커를 찾는다."""
+    for parent in [path, *path.parents]:
+        if (parent / ".obsidian").is_dir():
+            return True
+        if parent == Path.home():
+            break
+    return False
+
+
+def _validate_vault_root(vault_root: Path) -> None:
+    """vault_root 가 틀린 경로일 때 조용히 빈 폴더를 만들지 않도록 사용자에게 확인."""
+    if not vault_root.exists():
+        click.echo(f"⚠️  vault_root 가 존재하지 않습니다: {vault_root}")
+        click.echo("    config.yaml 의 vault_root 가 이 PC의 실제 Obsidian vault 경로인지 확인하세요.")
+        click.echo("    (Obsidian vault 는 보통 .obsidian/ 폴더를 포함합니다.)")
+        if not click.confirm("    이 경로를 새로 만들고 계속할까요?", default=False):
+            click.echo("init 중단. config.yaml 의 vault_root 를 수정한 뒤 다시 실행하세요.")
+            raise SystemExit(1)
+    elif not _looks_like_obsidian_vault(vault_root):
+        click.echo(f"⚠️  vault_root 에서 Obsidian vault(.obsidian/)가 보이지 않습니다: {vault_root}")
+        click.echo("    경로가 틀리면 북마크가 엉뚱한 폴더에 쌓입니다. 경로를 다시 확인하세요.")
+        if not click.confirm("    이대로 계속할까요?", default=False):
+            click.echo("init 중단. config.yaml 의 vault_root 를 확인하세요.")
+            raise SystemExit(1)
+
+
 @cli.command()
 def init() -> None:
     """git clone + cron 등록"""
     config = load_config()
+
+    _validate_vault_root(config.vault_root)
 
     for repo_name, repo in config.repos.items():
         if repo.path.exists():

@@ -33,7 +33,22 @@
     pip install -e ".[dev]"
 
     # 4. config 설정
-    cp config.yaml.example config.yaml   # config.yaml 편집
+    cp config.yaml.example config.yaml
+
+    #   (a) vault_root — 이 PC의 Obsidian vault 경로로 반드시 수정.
+    #       PC마다 다릅니다. Obsidian 앱에서 vault 위치를 확인하거나:
+    #         ls -d ~/obsidian-vault 2>/dev/null || echo "없음 → 직접 지정"
+    #       vault가 아직 없으면 먼저 만들고(또는 Obsidian에서 생성) 그 경로를 적습니다.
+    #       Bookmarks 하위 폴더까지 포함 (예: ~/Documents/MyVault/10_Bookmarks)
+
+    #   (b) repos.*.remote — clone 대상 repo가 GitHub/GHES에 미리 존재해야 함.
+    #       init 은 git clone 만 합니다(자동 생성 X). 없으면 먼저 생성:
+    #         gh repo create dEitY719/bookmarks-common --private
+    #       PAT 에 해당 repo Contents:Read 권한이 있는지 확인.
+
+    #   (c) PAT/API key 는 .env 가 아니라 쉘 환경변수로 주입됩니다.
+    #       init/pull/push 실행 전 반드시:
+    #         set -a && source ../.env && set +a
 
     # 5. 초기화 (git clone + cron 등록)
     karakeep-sync init
