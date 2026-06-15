@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 import yaml
 
+# config.yaml lives alongside pyproject.toml in the repo's sync/ dir
+# (= karakeep_sync/../config.yaml), matching README step 4 and .gitignore.
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+
 
 @dataclass
 class RepoConfig:
@@ -32,7 +36,7 @@ def load_config(
     mode_file: Path | None = None,
 ) -> Config:
     if config_path is None:
-        config_path = Path("~/apps/karakeep/sync/config.yaml").expanduser()
+        config_path = DEFAULT_CONFIG_PATH
     if mode_file is None:
         mode_file = Path("~/.dotfiles-setup-mode").expanduser()
 

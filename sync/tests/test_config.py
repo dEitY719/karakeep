@@ -2,7 +2,14 @@ import pytest
 from pathlib import Path
 import yaml
 
-from karakeep_sync.config import load_config, RepoConfig, Config
+from karakeep_sync.config import load_config, RepoConfig, Config, DEFAULT_CONFIG_PATH
+
+
+def test_default_config_path_is_repo_relative():
+    # config.yaml must resolve next to pyproject.toml in the repo's sync/ dir,
+    # not a hardcoded ~/apps/karakeep path (README step 4: `cd sync; cp ... config.yaml`).
+    assert DEFAULT_CONFIG_PATH.name == "config.yaml"
+    assert (DEFAULT_CONFIG_PATH.parent / "pyproject.toml").exists()
 
 SAMPLE_YAML = yaml.dump({
     "karakeep": {"url": "http://localhost:3000", "api_key": "test-key"},
