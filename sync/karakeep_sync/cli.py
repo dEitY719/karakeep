@@ -157,14 +157,20 @@ def init() -> None:
 
     # cron 등록
     sync_bin = Path(__file__).parent.parent / ".venv" / "bin" / "karakeep-sync"
+    env_path = Path(__file__).parent.parent.parent / ".env"
     log_path = config.log_dir / "cron.log"
     config.log_dir.mkdir(parents=True, exist_ok=True)
-    cron_line = f"*/30 * * * * {sync_bin} auto >> {log_path} 2>&1"
+    # cron 은 로그인 셸이 아니라 API key/PAT 가 env 에 없다. .env 를 직접 주입하지
+    # 않으면 auto 가 401 로 실패한다.
+    cron_cmd = f"set -a; . {env_path}; set +a; {sync_bin} auto"
+    cron_line = f"*/30 * * * * {cron_cmd} >> {log_path} 2>&1"
     result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
     existing = result.stdout if result.returncode == 0 else ""
+    # 기존 karakeep-sync auto 라인(구버전 포함)을 제거하고 새 라인으로 교체한다.
+    kept = [ln for ln in existing.splitlines() if f"{sync_bin} auto" not in ln]
     if cron_line in existing:
         click.echo("Cron already registered.")
     else:
-        new_crontab = existing.rstrip("\n") + f"\n{cron_line}\n"
+        new_crontab = "\n".join([*kept, cron_line]).strip("\n") + "\n"
         subprocess.run(["crontab", "-"], input=new_crontab, text=True, check=True)
         click.echo(f"Cron registered: {cron_line}")
