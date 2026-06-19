@@ -1,4 +1,5 @@
 # sync/tests/test_karakeep.py
+import json
 import pytest
 import httpx
 from pytest_httpx import HTTPXMock
@@ -121,3 +122,38 @@ def test_get_all_bookmarks_paginates(httpx_mock: HTTPXMock):
     assert len(bookmarks) == 2
     assert bookmarks[0].id == "abc123"
     assert bookmarks[1].id == "def456"
+
+
+# --- 회귀 방지: write API 스키마 (#14) ---
+
+def test_create_bookmark_sends_type_link(httpx_mock: HTTPXMock):
+    """link 북마크는 type 필드가 필수 — 누락 시 Karakeep 이 400 을 준다."""
+    httpx_mock.add_response(
+        method="POST", url=f"{BASE}/api/v1/bookmarks",
+        json={"id": "n1", "title": "New", "tags": [],
+              "createdAt": "2024-01-03T00:00:00.000Z",
+              "content": {"url": "https://new.com"}},
+    )
+    client = KarakeepClient(BASE, KEY)
+    client.create_bookmark(Bookmark(id="", url="https://new.com", title="New",
+                                    tags=[], created="", updated=""))
+    body = json.loads(httpx_mock.get_requests()[0].content)
+    assert body["type"] == "link"
+    assert body["url"] == "https://new.com"
+
+
+def test_add_tags_uses_tagname_schema(httpx_mock: HTTPXMock):
+    """올바른 태그 attach 스키마는 {"tags":[{"tagName":..}]} (과거 {"name":..} 는 400)."""
+    httpx_mock.add_response(
+        method="POST", url=f"{BASE}/api/v1/bookmarks/abc/tags", json={"attached": []},
+    )
+    client = KarakeepClient(BASE, KEY)
+    client.add_tags("abc", ["topic/python", "area/work"])
+    body = json.loads(httpx_mock.get_requests()[0].content)
+    assert body == {"tags": [{"tagName": "topic/python"}, {"tagName": "area/work"}]}
+
+
+def test_add_tags_empty_is_noop(httpx_mock: HTTPXMock):
+    client = KarakeepClient(BASE, KEY)
+    client.add_tags("abc", [])
+    assert httpx_mock.get_requests() == []
