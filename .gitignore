@@ -2,6 +2,10 @@
 .env
 data/
 logs/
+
+# machine-specific local overrides (corporate CA, proxy, etc. — never commit)
+docker-compose.override.yml
+certs/
 sync/sync-state.json
 sync/config.yaml
 sync/.venv/
