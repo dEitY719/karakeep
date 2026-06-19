@@ -141,6 +141,27 @@ EOF
 fi
 ok "PARA 골격 + 대시보드 준비"
 
+# 3b. Syncthing .stignore 배치 (전체 vault 노트 동기화 — 북마크 폴더 제외).
+#     SSOT: docs/pc-environment.md §6. 멱등: 기존 .stignore 는 덮어쓰지 않는다.
+STIGNORE_SRC="$REPO_ROOT/sync/stignore"
+if [ -f "$STIGNORE_SRC/vault-notes.stignore" ]; then
+  if [ ! -f "$VAULT/.stignore" ]; then
+    cp "$STIGNORE_SRC/vault-notes.stignore" "$VAULT/.stignore" && ok "vault-notes .stignore 배치"
+  else
+    warn "$VAULT/.stignore 이미 존재 → 유지 (§6 와 대조)"
+  fi
+  # 사내 노트 공유는 internal 모드에서만. external/home 에는 절대 두지 않는다.
+  if [ "$MODE" = internal ]; then
+    if [ ! -f "$VAULT/80-Company/.stignore" ]; then
+      cp "$STIGNORE_SRC/vault-company.stignore" "$VAULT/80-Company/.stignore" && ok "vault-company .stignore 배치 (internal)"
+    else
+      warn "$VAULT/80-Company/.stignore 이미 존재 → 유지"
+    fi
+  fi
+else
+  warn "sync/stignore 템플릿 없음 → Syncthing .stignore 수동 배치 필요 (§6)"
+fi
+
 # ---------- 4. python venv + 설치 ----------
 say "4/8 sync 패키지 설치"
 cd "$SYNC_DIR"
@@ -254,3 +275,10 @@ if [ "$AI" = ollama ]; then
   echo "  • 모델 준비: ollama pull $OLLAMA_MODEL"
 fi
 echo "  • Obsidian 에서 ObsidianVault-PARA 열기 → 커뮤니티 플러그인 켜기(제한모드 해제) → Ctrl+R"
+echo "  • 전체 vault 노트 동기화(Syncthing) — SSOT: docs/pc-environment.md §6:"
+echo "      - Syncthing 설치 후 디바이스 페어링 (디바이스 ID 는 머신별 → 수동)"
+echo "      - 공유 'vault-notes' 루트 = $VAULT (전 PC). .stignore 가 북마크·80-Company 제외"
+if [ "$MODE" = internal ]; then
+  echo "      - 공유 'vault-company' 루트 = $VAULT/80-Company (internal PC 끼리만!)"
+  echo "        external/home PC 에는 추가 금지 — 사내 노트 유출 방지"
+fi

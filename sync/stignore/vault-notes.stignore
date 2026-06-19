@@ -1,0 +1,26 @@
+// Syncthing 무시 규칙 — "vault-notes" 공유 (vault 최상위, 전 5-PC 공유)
+// 위치: <ObsidianVault-PARA>/.stignore  (bootstrap.sh 가 배치)
+// 문법: Syncthing .stignore (패턴은 공유 루트 기준 상대경로, // 는 주석)
+//
+// 목적:
+//  1) karakeep-sync 가 관리하는 북마크 git repo 를 제외한다.
+//     이 폴더들은 30분 cron 으로 commit/pull 하며 중첩 .git churn·충돌을 일으킨다.
+//  2) 사내 전용 노트(80-Company)를 전-PC 공유에서 완전히 배제한다.
+//     사내 노트는 internal 전용 "vault-company" 공유로만 이동한다 (데이터 거버넌스).
+
+// --- 북마크 git repo (karakeep-sync 관리, 30분 churn) ---
+30-Resource/Bookmarks
+
+// --- 사내 전용 (외부 PC 유출 금지 — 별도 internal-only 공유로만 동기화) ---
+80-Company
+
+// --- Obsidian 로컬 작업 상태 (PC 마다 다름 → 동기화 제외) ---
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/workspace.json.bak
+.obsidian/cache
+
+// --- OS/임시 ---
+.DS_Store
+*.tmp
+~*

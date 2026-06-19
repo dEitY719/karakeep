@@ -96,6 +96,69 @@ repos:
 ### 경계(스코프)
 
 - 부트스트랩은 **북마크 파이프라인 + vault 골격**만 만든다.
-- vault 의 실제 **노트 본문** 동기화(전 PC 공유)는 별도 메커니즘
-  (Obsidian Sync / Syncthing 등). 북마크 폴더 안의 `.git` 과 충돌하지 않도록
-  전체-vault 동기화에서 북마크 폴더는 제외할 것.
+- vault 의 실제 **노트 본문** 동기화(전 PC 공유)는 별도 메커니즘 → **§6** 참조.
+  북마크 폴더 안의 `.git` 과 충돌하지 않도록 전체-vault 동기화에서 북마크 폴더는 제외한다.
+
+## 6. 전체 vault 노트 동기화 (북마크 폴더 제외)
+
+북마크는 karakeep-sync 의 git(`bookmarks-common`/`bookmarks-company`)으로 이미
+PC 간 공유되지만, 그 외 일반 노트(`10-Project`/`20-Area`/`30-Resource` 등)는
+공유 메커니즘이 없었다. 5-PC 가 동일 정보를 공유하려면 전체 vault 동기화가 필요하다.
+
+### 6.1 선정: Syncthing (P2P, 무료, 클라우드 불필요)
+
+| 옵션 | 채택 | 이유 |
+|------|------|------|
+| **Syncthing** | ✅ | 무료·P2P, 외부 클라우드 불필요(사내 데이터가 device↔device 메시 밖으로 안 나감), `.stignore` 로 폴더 제외, 디바이스별 공유 분리로 거버넌스 경계 강제 가능 |
+| Obsidian Sync | △ | 쉽지만 유료, 외부 클라우드 경유 → `internal` 접속 제한·사내 노트 거버넌스 위험 |
+| Git(전체 vault) | ✗ | 북마크 폴더의 중첩 `.git` → 서브모듈화 복잡, `internal` 은 GitHub push 불가(GHES 필요) |
+| OneDrive/Dropbox | ✗ | `.git` churn·충돌 위험, 사내 노트 외부 유출 |
+
+> 핵심 제약: 북마크 폴더(`30-Resource/Bookmarks`, `80-Company/Bookmarks`)는
+> karakeep-sync 가 30분마다 commit/pull 하는 `.git` repo 다. 전체-vault 동기화가
+> 이들을 함께 옮기면 **중첩 `.git` 충돌 + 지속 churn** 이 난다 → 반드시 제외한다.
+
+### 6.2 두 개의 Syncthing 공유 (거버넌스 경계)
+
+사내 노트(`80-Company`)가 외부로 새지 않도록 **공유를 둘로 분리**한다:
+
+| 공유 | 루트 | 연결 대상 | `.stignore` 템플릿 | 제외 항목 |
+|------|------|-----------|--------------------|-----------|
+| **vault-notes** | vault 최상위 | **5-PC 전부** | `sync/stignore/vault-notes.stignore` | `30-Resource/Bookmarks`(공용 북마크 git), **`80-Company` 통째**, `.obsidian/workspace*`·cache |
+| **vault-company** | `80-Company` | **internal PC 끼리만** | `sync/stignore/vault-company.stignore` | `Bookmarks`(사내 북마크 GHES git) |
+
+- `vault-notes` 가 `80-Company` 를 통째로 제외하므로, 사내 노트는 전-PC 공유에
+  **절대 올라가지 않는다**. external/home PC 에는 `vault-company` 공유를 **추가하지 않는다**
+  → 사내 노트가 사내망 밖으로 나가지 않음을 물리적으로 보장.
+- `80-Company` 는 `vault-notes` 안에 중첩되지만 위 제외 규칙으로 두 공유는 충돌하지 않는다
+  (Syncthing 중첩 폴더는 외부 공유에서 ignore 되어 있으면 허용된다).
+
+모드별 정리:
+
+| 모드 | vault-notes | vault-company |
+|------|-------------|---------------|
+| `internal` | 참여 | **참여 (internal 끼리만)** |
+| `external` | 참여 | **불참 (사내 노트 수신 금지)** |
+| `home` | 참여 | **불참** |
+
+### 6.3 부트스트랩 연동
+
+`scripts/bootstrap.sh` 가 vault 골격 생성 단계에서 위 `.stignore` 템플릿을 배치한다:
+
+- 전 모드: `sync/stignore/vault-notes.stignore` → `<vault>/.stignore`
+- `internal` 모드만: `sync/stignore/vault-company.stignore` → `<vault>/80-Company/.stignore`
+
+기존 `.stignore` 는 덮어쓰지 않는다(멱등). Syncthing **설치·디바이스 페어링·폴더
+공유 추가**는 디바이스 ID 가 머신별 비밀이므로 스크립트가 자동화하지 않고
+수동 단계로 안내한다(이 repo 는 토폴로지만 담는다 — 상단 주의 참고).
+
+### 6.4 검증 절차 (최소 2-PC)
+
+1. 두 PC 에 Syncthing 설치 → 서로 디바이스 추가.
+2. 양쪽 `vault-notes` 공유 연결(루트=vault). `.stignore` 가 배치됐는지 확인.
+3. 한 PC 에서 `10-Project` 에 노트 생성 → 다른 PC 로 전파 확인.
+4. 북마크 무충돌 확인: 30분 cron 1회 경과 후 `30-Resource/Bookmarks` 의
+   `git status` 가 깨끗하고, Syncthing 이 그 폴더를 건드리지 않았는지 확인
+   (`.stignore` 매칭 → Out of Sync 항목 없음).
+5. (internal 2대 한정) `vault-company` 공유 연결 → `80-Company` 노트 전파 확인,
+   동시에 external/home PC 에는 사내 노트가 **나타나지 않음** 확인.
