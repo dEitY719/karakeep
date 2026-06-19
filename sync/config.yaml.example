@@ -2,15 +2,18 @@ karakeep:
   url: http://localhost:3001
   api_key: ${KARAKEEP_API_KEY}
 
-vault_root: ~/obsidian-vault/10_Bookmarks
+# ObsidianVault-PARA 의 최상위 경로. bootstrap.sh 가 이 PC 경로로 자동 치환한다.
+vault_root: /mnt/c/Users/CHANGE_ME/Documents/ObsidianVault-PARA
 
 repos:
+  # 공용 북마크 (GitHub) — 전 PC 공유. internal 모드에선 pull-only (push 금지).
   common:
-    path: Common
+    path: 30-Resource/Bookmarks
     remote: https://${GITHUB_PAT}@github.com/dEitY719/bookmarks-common.git
     pull: true
+  # 사내 북마크 (GHES) — internal 모드에서만 활성 (config.py 가 그 외 모드에선 skip).
   company:
-    path: Company
+    path: 80-Company/Bookmarks
     remote: https://${GHES_PAT}@${GHES_HOST}/dEitY719/bookmarks-company.git
     pull: true
 
