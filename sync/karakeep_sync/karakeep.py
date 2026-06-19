@@ -38,20 +38,30 @@ class KarakeepClient:
         return results
 
     def create_bookmark(self, bm: Bookmark) -> Bookmark:
-        payload = {"url": bm.url, "title": bm.title, "note": bm.note}
+        # Karakeep link 북마크는 `type` 필드가 필수다 — 없으면 400 Bad Request.
+        payload: dict = {"type": "link", "url": bm.url, "title": bm.title}
+        if bm.note:
+            payload["note"] = bm.note
         resp = httpx.post(
             f"{self._base}/api/v1/bookmarks", json=payload, headers=self._headers
         )
         resp.raise_for_status()
         created = self._parse(resp.json())
-        for tag in bm.tags:
-            self._attach_tag(created.id, tag)
+        self.add_tags(created.id, bm.tags)
         return created
 
-    def _attach_tag(self, bookmark_id: str, tag_name: str) -> None:
+    def add_tags(self, bookmark_id: str, tags: list[str]) -> None:
+        """북마크에 태그를 붙인다 (배치·멱등).
+
+        올바른 스키마는 ``{"tags": [{"tagName": ...}]}`` 이다. 과거 구현은
+        ``{"name": ...}`` 를 보내 400 을 받았다 — write 경로가 실제로 호출된 적이
+        없어 드러나지 않았던 잠복 버그.
+        """
+        if not tags:
+            return
         resp = httpx.post(
             f"{self._base}/api/v1/bookmarks/{bookmark_id}/tags",
-            json={"name": tag_name},
+            json={"tags": [{"tagName": t} for t in tags]},
             headers=self._headers,
         )
         resp.raise_for_status()
@@ -64,8 +74,7 @@ class KarakeepClient:
             headers=self._headers,
         )
         resp.raise_for_status()
-        for tag in bm.tags:
-            self._attach_tag(bookmark_id, tag)
+        self.add_tags(bookmark_id, bm.tags)
 
     def _parse(self, item: dict) -> Bookmark:
         # URL/title 은 link 타입의 경우 content 안에 중첩되어 온다.

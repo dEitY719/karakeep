@@ -9,11 +9,54 @@ from karakeep_sync.state import load_state, save_state, BookmarkState
 from karakeep_sync.karakeep import KarakeepClient
 from karakeep_sync.markdown import bookmark_to_md, bookmark_filename, md_to_bookmark
 from karakeep_sync.git_ops import pull, changed_files_after_pull, commit_and_push
+from karakeep_sync import chrome_import
 
 
 @click.group()
 def cli() -> None:
     pass
+
+
+@cli.command(name="import-chrome")
+@click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--commit", is_flag=True, help="실제 등록 (기본은 dry-run)")
+@click.option("--no-folder-tags", is_flag=True, help="폴더→태그 매핑 끔")
+@click.option("--exclude-folder", "exclude_folders", multiple=True,
+              help="이 폴더명을 경로에 포함한 북마크는 제외 (반복 가능, 대소문자 무시)")
+@click.option("--export-excluded", type=click.Path(path_type=Path),
+              help="제외된 북마크를 JSON 으로 따로 저장 (사내 repo 처리용)")
+def import_chrome(file: Path, commit: bool, no_folder_tags: bool,
+                  exclude_folders: tuple[str, ...], export_excluded: Path | None) -> None:
+    """Chrome 북마크(HTML 내보내기/원본 JSON) → Karakeep import.
+
+    폴더→태그 매핑 + 기존 URL dedup 후 멱등 업서트. 본문 크롤·AI 태깅은 cron 이 처리.
+    """
+    config = load_config()
+    client = KarakeepClient(config.karakeep_url, config.karakeep_api_key)
+
+    entries = chrome_import.parse_chrome_bookmarks(file.read_text(encoding="utf-8", errors="replace"))
+    click.echo(f"[parse] {len(entries)} 개 URL")
+
+    kept, excluded = chrome_import.split_excluded(entries, exclude_folders)
+    if exclude_folders:
+        click.echo(f"[exclude] {len(excluded)} 개 제외 ({', '.join(exclude_folders)})")
+        if export_excluded:
+            export_excluded.write_text(chrome_import.excluded_to_json(excluded), encoding="utf-8")
+            click.echo(f"[exclude] 제외분 저장 → {export_excluded}")
+
+    def _progress(i: int, n: int) -> None:
+        if i % 25 == 0:
+            click.echo(f"  …{i}/{n}")
+
+    result = chrome_import.import_entries(
+        client, kept, folder_tags=not no_folder_tags,
+        dry_run=not commit, progress=_progress,
+    )
+    click.echo(f"[dedup] 대상 {result.todo} (신규 {result.to_create} / 기존 {result.todo - result.to_create})")
+    if not commit:
+        click.echo("[dry-run] 실제 등록 안 함. 확인되면 --commit 을 붙여 다시 실행.")
+    else:
+        click.echo(f"[done] 신규 생성 {result.created} · 태그 부착 {result.tagged} · 실패 {result.failed}.")
 
 
 @cli.command()
