@@ -1,0 +1,17 @@
+// Syncthing 무시 규칙 — "vault-company" 공유 (80-Company, internal PC 끼리만 공유)
+// 위치: <ObsidianVault-PARA>/80-Company/.stignore  (bootstrap.sh 가 internal 모드에서만 배치)
+// 문법: Syncthing .stignore (패턴은 공유 루트=80-Company 기준 상대경로)
+//
+// 이 공유는 internal 모드 PC 사이에서만 연결한다. external/home PC 에는 절대
+// 추가하지 않는다 → 사내 노트가 사내망 밖으로 나가지 않음을 물리적으로 보장.
+//
+// 주의: 이 폴더(80-Company)는 vault-notes 공유 안에 중첩된다. vault-notes 의
+// .stignore 가 80-Company 를 통째로 제외하므로 두 공유는 충돌하지 않는다.
+
+// --- 사내 북마크 git repo (GHES, karakeep-sync 관리) — Syncthing 제외 ---
+Bookmarks
+
+// --- OS/임시 ---
+.DS_Store
+*.tmp
+~*
