@@ -68,12 +68,14 @@ class KarakeepClient:
             self._attach_tag(bookmark_id, tag)
 
     def _parse(self, item: dict) -> Bookmark:
+        # URL/title 은 link 타입의 경우 content 안에 중첩되어 온다.
+        content = item.get("content") or {}
         return Bookmark(
             id=item["id"],
-            url=item["url"],
-            title=item.get("title") or "",
+            url=content.get("url") or item.get("url") or "",
+            title=item.get("title") or content.get("title") or "",
             tags=[t["name"] for t in item.get("tags", [])],
             created=item["createdAt"],
-            updated=item["updatedAt"],
+            updated=item.get("modifiedAt") or item.get("updatedAt") or item["createdAt"],
             note=item.get("note") or "",
         )
