@@ -50,6 +50,35 @@ def test_work_mode_common_is_pull_only(tmp_path):
     assert config.repos["company"].push is True
 
 
+def test_repo_exclude_lists_parsed(tmp_path):
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("public")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "karakeep": {"url": "http://localhost:3000", "api_key": "k"},
+        "vault_root": "/tmp/vault",
+        "repos": {
+            "common": {
+                "path": "Common",
+                "remote": "https://t@github.com/u/c.git",
+                "exclude_lists": ["Company"],
+            },
+        },
+        "logs": {"dir": "/tmp/logs", "retention_days": 30},
+    }))
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.repos["common"].exclude_lists == ["Company"]
+
+
+def test_repo_exclude_lists_defaults_empty(tmp_path):
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("public")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(SAMPLE_YAML)  # exclude_lists 미지정
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.repos["common"].exclude_lists == []
+
+
 def test_non_internal_mode_is_home(tmp_path):
     for mode in ["external", "home", "public", "whatever"]:
         mode_file = tmp_path / ".dotfiles-setup-mode"

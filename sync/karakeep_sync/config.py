@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
 
@@ -15,6 +15,9 @@ class RepoConfig:
     remote: str
     push: bool
     pull: bool
+    # 이 top-level 리스트에 속한 북마크는 이 repo export 에서 제외한다.
+    # 회사(사내) 북마크가 공개 github repo 로 새어나가지 않게 하는 안전장치.
+    exclude_lists: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -58,6 +61,7 @@ def load_config(
             remote=_expand(repo_raw["remote"]),
             push=push_allowed,
             pull=repo_raw.get("pull", True),
+            exclude_lists=repo_raw.get("exclude_lists", []),
         )
 
     return Config(

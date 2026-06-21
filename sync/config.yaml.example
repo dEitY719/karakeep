@@ -11,6 +11,11 @@ repos:
     path: 30-Resource/Bookmarks
     remote: https://${GITHUB_PAT}@github.com/dEitY719/bookmarks-common.git
     pull: true
+    # 이 top-level 리스트에 속한 북마크는 공개 GitHub repo export 에서 제외한다.
+    # 단일 공유 Karakeep 인스턴스(예: Tailscale Funnel)에서 사내 북마크가 공개
+    # repo 로 새어나가지 않게 하는 안전장치. 회사 북마크는 Karakeep 의 'Company'
+    # 리스트에 넣으면 된다 (웹에선 보이되 markdown export 는 안 됨).
+    exclude_lists: [Company]
   # 사내 북마크 (GHES) — internal 모드에서만 활성 (config.py 가 그 외 모드에선 skip).
   company:
     path: 80-Company/Bookmarks
