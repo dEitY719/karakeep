@@ -44,13 +44,11 @@ cd ~/apps/karakeep/sync
 cp config.yaml.example config.yaml
 # config.yaml 편집 (vault_root, PAT 환경변수 확인)
 
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync               # .venv 생성 + 의존성(dev 포함) 설치
 
-karakeep-sync init    # git clone + cron 등록
-karakeep-sync status  # 동기화 대기 북마크 수 확인
-karakeep-sync auto    # 첫 번째 전체 sync
+uv run karakeep-sync init    # git clone + cron 등록
+uv run karakeep-sync status  # 동기화 대기 북마크 수 확인
+uv run karakeep-sync auto    # 첫 번째 전체 sync
 ```
 
 ### 5. 브라우저 북마크 import (선택)
