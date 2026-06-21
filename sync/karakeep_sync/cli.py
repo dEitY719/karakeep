@@ -212,12 +212,14 @@ def status() -> None:
     push_repos = [repo for repo in config.repos.values() if repo.push]
     # push 와 동일 판정: state 상 변경분이면서, 적어도 한 push repo 로 라우팅되는 것만 pending.
     # 어느 repo 로도 안 가는 북마크(예: external PC 의 Company)는 영구 pending 오탐을 막는다.
-    pending = [
-        bm for bm in bookmarks
-        if _bookmark_needs_push(bm, state.get(bm.id))
-        and any(_repo_accepts_bookmark(repo, list_paths.get(bm.id, [])) for repo in push_repos)
-    ]
-    click.echo(f"Pending push: {len(pending)} bookmark(s)")
+    pending = 0
+    for bm in bookmarks:
+        if not _bookmark_needs_push(bm, state.get(bm.id)):
+            continue
+        bm_lists = list_paths.get(bm.id, [])
+        if any(_repo_accepts_bookmark(repo, bm_lists) for repo in push_repos):
+            pending += 1
+    click.echo(f"Pending push: {pending} bookmark(s)")
 
 
 def _looks_like_obsidian_vault(path: Path) -> bool:
