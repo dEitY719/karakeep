@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "karakeep-sync"
@@ -14,13 +14,13 @@ dependencies = [
 
 # 패키지를 명시 — flat-layout 자동탐지가 sync/ 의 비-패키지 디렉토리
 # (예: stignore/ Syncthing 템플릿)까지 후보로 잡아 빌드가 깨지는 것을 방지.
-[tool.setuptools]
+[tool.hatch.build.targets.wheel]
 packages = ["karakeep_sync"]
 
 [project.scripts]
 karakeep-sync = "karakeep_sync.cli:cli"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-httpx>=0.30",
