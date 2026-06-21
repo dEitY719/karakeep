@@ -23,21 +23,32 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SYNC_DIR="$REPO_ROOT/sync"
 AI="${KARAKEEP_AI:-auto}"      # auto|ollama|none|<url>   (--ai 로 덮어쓰기)
 VAULT_PARENT_OVERRIDE=""        # --vault-parent 로 덮어쓰기
+MODE_OVERRIDE=""                # --mode 로 덮어쓰기 (없으면 ~/.dotfiles-setup-mode)
+SYNC_HOST=0                     # --sync-host: docker 미실행(순수 sync 클라이언트). external 외 모드는 자동 적용
 
 usage() {
   cat <<'EOF'
 사용법: scripts/bootstrap.sh [옵션]
 
 옵션:
+  --mode <internal|external|home>  PC 모드 강제 (기본: ~/.dotfiles-setup-mode 읽음)
+  --sync-host                  docker 미실행 (순수 sync 클라이언트). external 외 모드는 자동 적용
   --ai <auto|ollama|none|URL>  AI 태깅 백엔드 (기본: auto = external→ollama, 그 외→none)
   --vault-parent <경로>         vault 부모 디렉토리 강제 (기본: <Windows홈>/Documents)
   -h, --help                    도움말
 
-모드는 ~/.dotfiles-setup-mode (internal|external|home) 로 결정된다.
+모드 결정 우선순위: --mode 옵션 > ~/.dotfiles-setup-mode 파일.
+둘 다 없으면 에러로 종료하며 internal|external|home 중 하나를 지정하라고 안내한다.
+
+docker: external 모드에서만 Karakeep 컨테이너를 띄운다. internal/home 은
+공유 인스턴스를 바라보는 순수 sync 클라이언트라 자동으로 --sync-host 가 적용된다
+(docker 미실행). external 에서도 컨테이너 없이 돌리려면 --sync-host 를 직접 준다.
 EOF
 }
 while [ $# -gt 0 ]; do
   case "$1" in
+    --mode) MODE_OVERRIDE="$2"; shift 2;;
+    --sync-host) SYNC_HOST=1; shift;;
     --ai) AI="$2"; shift 2;;
     --vault-parent) VAULT_PARENT_OVERRIDE="$2"; shift 2;;
     -h|--help) usage; exit 0;;
@@ -45,20 +56,43 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# ---------- 0. preflight ----------
-say "0/8 사전 점검"
-for bin in docker python3 git curl openssl; do
+# ---------- 0. 모드 + sync-host 결정 ----------
+say "0/8 모드 감지"
+MODE_FILE="$HOME/.dotfiles-setup-mode"
+# 우선순위: --mode 옵션 > ~/.dotfiles-setup-mode. 둘 다 없으면 조용히 home 으로
+# 떨어지지 않고 에러로 종료한다 (잘못된 모드로 docker/clone 이 도는 사고 방지).
+if [ -n "$MODE_OVERRIDE" ]; then
+  MODE="$MODE_OVERRIDE"; MODE_SRC="--mode 옵션"
+elif [ -f "$MODE_FILE" ]; then
+  MODE="$(tr -d '[:space:]' < "$MODE_FILE")"; MODE_SRC="$MODE_FILE"
+else
+  die "모드를 결정할 수 없습니다 ($MODE_FILE 없음, --mode 옵션 없음).
+    다음 중 하나로 지정하세요:
+      (a) scripts/bootstrap.sh --mode <internal|external|home>
+      (b) echo <internal|external|home> > $MODE_FILE   # 셋 중 하나 골라 입력 후 재실행"
+fi
+case "$MODE" in
+  internal|external|home) ;;
+  *) die "잘못된 모드 '$MODE' (출처: $MODE_SRC). internal|external|home 중 하나여야 합니다.";;
+esac
+# docker 로 Karakeep 을 실제 띄우는 건 external(공유 인스턴스 호스트)뿐.
+# internal/home 은 공유 인스턴스를 바라보는 순수 sync 클라이언트 → docker 미실행.
+AUTO_SYNC=0
+if [ "$MODE" != external ] && [ "$SYNC_HOST" = 0 ]; then SYNC_HOST=1; AUTO_SYNC=1; fi
+MODE_NOTE=""
+[ "$SYNC_HOST" = 1 ] && MODE_NOTE=" · sync-host(docker 미실행)$([ "$AUTO_SYNC" = 1 ] && echo ' [자동]')"
+ok "모드: $MODE (출처: $MODE_SRC)$MODE_NOTE"
+
+# ---------- 1. preflight ----------
+say "1/8 사전 점검"
+for bin in python3 git curl openssl; do
   command -v "$bin" >/dev/null || die "$bin 가 필요합니다."
 done
-docker compose version >/dev/null 2>&1 || die "docker compose(v2) 가 필요합니다."
+if [ "$SYNC_HOST" = 0 ]; then
+  command -v docker >/dev/null || die "docker 가 필요합니다 (external 모드). sync 전용이면 --sync-host 를 쓰세요."
+  docker compose version >/dev/null 2>&1 || die "docker compose(v2) 가 필요합니다."
+fi
 ok "필수 도구 확인"
-
-# ---------- 1. 모드 ----------
-say "1/8 모드 감지"
-MODE_FILE="$HOME/.dotfiles-setup-mode"
-MODE="$( [ -f "$MODE_FILE" ] && tr -d '[:space:]' < "$MODE_FILE" || echo home )"
-case "$MODE" in internal|external|home) ;; *) warn "알 수 없는 모드 '$MODE' → home 으로 처리"; MODE=home;; esac
-ok "모드: $MODE"
 
 # ---------- 2. Windows vault 경로 ----------
 say "2/8 Windows 사용자/vault 경로 탐지"
@@ -189,6 +223,9 @@ fi
 
 # ---------- 7. docker-compose.override.yml (모드별) ----------
 say "7/8 docker override 생성 (모드: $MODE)"
+if [ "$SYNC_HOST" = 1 ]; then
+  ok "sync-host → 로컬 컨테이너 없음, override 생략"
+else
 OVERRIDE="$REPO_ROOT/docker-compose.override.yml"
 CERTS_DIR="$REPO_ROOT/certs"
 # 7a. 사내 TLS 가로채기(CA) 자동 감지 — 공개사이트 leaf 의 발급자가 호스트 번들의
@@ -249,12 +286,15 @@ else
   } > "$OVERRIDE"
   ok "override 생성 (AI=$AI, CA=$CA_INJECT)"
 fi
+fi
 
 # ---------- 8. 기동 + init ----------
-say "8/8 컨테이너 기동 + init"
+say "8/8 $([ "$SYNC_HOST" = 1 ] && echo 'init (sync-host: docker 미실행)' || echo '컨테이너 기동 + init')"
 ENV_OK=1
 grep -q '^KARAKEEP_API_KEY=.\+' "$REPO_ROOT/.env" 2>/dev/null || ENV_OK=0
-( cd "$REPO_ROOT" && docker compose up -d ) && ok "컨테이너 기동"
+if [ "$SYNC_HOST" = 0 ]; then
+  ( cd "$REPO_ROOT" && docker compose up -d ) && ok "컨테이너 기동"
+fi
 if [ "$ENV_OK" = 1 ]; then
   ( cd "$SYNC_DIR" && set -a && . "$REPO_ROOT/.env" && set +a && "$SYNC_BIN" init ) && ok "karakeep-sync init 완료"
 else
