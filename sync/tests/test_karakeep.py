@@ -193,20 +193,20 @@ def test_get_all_lists(httpx_mock: HTTPXMock):
     assert ipo.parent_id == "us"
 
 
-def test_bookmark_in_excluded_list_matches_top_level():
-    from karakeep_sync.karakeep import bookmark_in_excluded_list
+def test_bookmark_in_any_list_matches_top_level():
+    from karakeep_sync.karakeep import bookmark_in_any_list
     # 정확히 일치
-    assert bookmark_in_excluded_list(["Company"], ["Company"]) is True
-    # 하위 폴더(Company/...)도 제외 대상
-    assert bookmark_in_excluded_list(["Company/사내포털"], ["Company"]) is True
-    # 무관한 리스트는 통과
-    assert bookmark_in_excluded_list(["미국 주식 사이트/11 IPO·SPAC"], ["Company"]) is False
-    # 리스트 없음 → 통과
-    assert bookmark_in_excluded_list([], ["Company"]) is False
-    # 제외 목록이 비면 무조건 통과
-    assert bookmark_in_excluded_list(["Company"], []) is False
-    # "Companyabc" 같은 접두사 오탐 방지
-    assert bookmark_in_excluded_list(["Companywide"], ["Company"]) is False
+    assert bookmark_in_any_list(["Company"], ["Company"]) is True
+    # 하위 폴더(Company/...)도 매칭
+    assert bookmark_in_any_list(["Company/사내포털"], ["Company"]) is True
+    # 무관한 리스트는 미매칭
+    assert bookmark_in_any_list(["미국 주식 사이트/11 IPO·SPAC"], ["Company"]) is False
+    # 리스트 없음 → 미매칭
+    assert bookmark_in_any_list([], ["Company"]) is False
+    # 대상 목록이 비면 무조건 미매칭
+    assert bookmark_in_any_list(["Company"], []) is False
+    # "Companywide" 같은 접두사 오탐 방지
+    assert bookmark_in_any_list(["Companywide"], ["Company"]) is False
 
 
 def test_get_bookmark_list_paths(httpx_mock: HTTPXMock):

@@ -18,6 +18,9 @@ class RepoConfig:
     # 이 top-level 리스트에 속한 북마크는 이 repo export 에서 제외한다.
     # 회사(사내) 북마크가 공개 github repo 로 새어나가지 않게 하는 안전장치.
     exclude_lists: list[str] = field(default_factory=list)
+    # 지정 시: 이 top-level 리스트에 속한 북마크만 이 repo 로 export 한다.
+    # 예: 사내 GHES repo 는 include_lists=[Company] 로 회사 북마크만 담는다.
+    include_lists: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -62,6 +65,7 @@ def load_config(
             push=push_allowed,
             pull=repo_raw.get("pull", True),
             exclude_lists=repo_raw.get("exclude_lists", []),
+            include_lists=repo_raw.get("include_lists", []),
         )
 
     return Config(

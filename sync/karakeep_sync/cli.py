@@ -6,7 +6,7 @@ import click
 
 from karakeep_sync.config import load_config
 from karakeep_sync.state import load_state, save_state, BookmarkState
-from karakeep_sync.karakeep import KarakeepClient, bookmark_in_excluded_list
+from karakeep_sync.karakeep import KarakeepClient, bookmark_in_any_list
 from karakeep_sync.markdown import bookmark_to_md, bookmark_filename, md_to_bookmark
 from karakeep_sync.git_ops import pull, changed_files_after_pull, commit_and_push
 from karakeep_sync import chrome_import
@@ -84,8 +84,12 @@ def push(force: bool) -> None:
                 continue
 
             bm.lists = list_paths.get(bm.id, [])
-            # 회사(사내) 리스트 북마크는 공개 repo export 에서 제외 — 외부 유출 방지.
-            if bookmark_in_excluded_list(bm.lists, repo.exclude_lists):
+            # repo 별 리스트 라우팅:
+            #  - include_lists 지정 시 그 리스트 북마크만 export (예: 회사 GHES repo = Company 만)
+            #  - exclude_lists 에 속하면 제외 (예: 공개 github repo 에서 Company 제외 — 유출 방지)
+            if repo.include_lists and not bookmark_in_any_list(bm.lists, repo.include_lists):
+                continue
+            if bookmark_in_any_list(bm.lists, repo.exclude_lists):
                 continue
             md_path = repo.path / bookmark_filename(bm)
             md_path.parent.mkdir(parents=True, exist_ok=True)
