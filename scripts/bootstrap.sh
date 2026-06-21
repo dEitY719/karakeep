@@ -88,6 +88,7 @@ say "1/8 사전 점검"
 for bin in python3 git curl openssl; do
   command -v "$bin" >/dev/null || die "$bin 가 필요합니다."
 done
+command -v uv >/dev/null 2>&1 || die "uv 가 필요합니다 — https://docs.astral.sh/uv/ 설치 후 재실행"
 if [ "$SYNC_HOST" = 0 ]; then
   command -v docker >/dev/null || die "docker 가 필요합니다 (external 모드). sync 전용이면 --sync-host 를 쓰세요."
   docker compose version >/dev/null 2>&1 || die "docker compose(v2) 가 필요합니다."
@@ -216,8 +217,8 @@ fi
 # ---------- 4. uv sync (venv + 설치) ----------
 say "4/8 sync 패키지 설치 (uv)"
 cd "$SYNC_DIR"
-command -v uv >/dev/null 2>&1 || die "uv 가 필요합니다 — https://docs.astral.sh/uv/ 설치 후 재실행"
 # uv sync: .venv 생성 + 의존성 + dev 그룹(pytest) 설치. dev 는 기본 그룹이라 자동 포함.
+# (uv 존재 여부는 1단계 preflight 에서 확인)
 uv sync -q && ok "karakeep-sync 설치 (uv sync — .venv + dev 의존성)"
 SYNC_BIN="$SYNC_DIR/.venv/bin/karakeep-sync"
 
