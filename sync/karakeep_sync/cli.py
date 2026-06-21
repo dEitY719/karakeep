@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 import subprocess
 import click
 
@@ -11,10 +12,36 @@ from karakeep_sync.markdown import bookmark_to_md, bookmark_filename, md_to_book
 from karakeep_sync.git_ops import pull, changed_files_after_pull, commit_and_push
 from karakeep_sync import chrome_import
 
+# repo-root/.env — check.sh(set -a; . $REPO_ROOT/.env) 및 cron 주입이 쓰는 위치와 동일.
+ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+
+
+def _load_dotenv_if_present(env_file: Path = ENV_PATH) -> None:
+    """repo-root/.env 를 자동 주입한다 — 대화형 실행 시 source 누락을 막는다(#25).
+
+    check.sh·cron 은 .env 를 직접 source 하지만 CLI 직접 실행은 그러지 않아,
+    셸에 export 안 된 상태로 ``karakeep-sync push`` 를 돌리면 config 의 ${VAR}
+    치환이 ValueError 로 깨졌다. 이미 셸/cron 이 설정한 값은 덮어쓰지 않는다
+    (셸 > .env 우선순위 — setdefault 로 보장).
+    """
+    if not env_file.exists():
+        return
+    with open(env_file) as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            if key.startswith("export "):  # `export FOO=bar` 형태도 허용
+                key = key[len("export "):].strip()
+            os.environ.setdefault(key, val.strip().strip('"').strip("'"))
+
 
 @click.group()
 def cli() -> None:
-    pass
+    # 모든 서브커맨드 진입 전 .env 주입 — push/pull/auto/status/init/import-chrome 공통.
+    _load_dotenv_if_present()
 
 
 @cli.command(name="import-chrome")
@@ -212,7 +239,7 @@ def init() -> None:
 
     # cron 등록
     sync_bin = Path(__file__).parent.parent / ".venv" / "bin" / "karakeep-sync"
-    env_path = Path(__file__).parent.parent.parent / ".env"
+    env_path = ENV_PATH
     log_path = config.log_dir / "cron.log"
     config.log_dir.mkdir(parents=True, exist_ok=True)
     # cron 은 로그인 셸이 아니라 API key/PAT 가 env 에 없다. .env 를 직접 주입하지

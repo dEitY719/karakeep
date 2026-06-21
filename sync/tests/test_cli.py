@@ -362,3 +362,50 @@ def test_status_shows_pending_count(tmp_path):
 
     assert result.exit_code == 0
     assert "1" in result.output
+
+
+# --- .env 자동 로드 (#25) ---
+
+def test_dotenv_loads_keys(tmp_path, monkeypatch):
+    from karakeep_sync.cli import _load_dotenv_if_present
+    env = tmp_path / ".env"
+    env.write_text('GHES_PAT=abc123\nGHES_HOST="ghe.example"\nexport GHES_OWNER=acme\n')
+    for k in ("GHES_PAT", "GHES_HOST", "GHES_OWNER"):
+        monkeypatch.delenv(k, raising=False)
+
+    _load_dotenv_if_present(env)
+
+    import os
+    assert os.environ["GHES_PAT"] == "abc123"
+    assert os.environ["GHES_HOST"] == "ghe.example"   # 따옴표 제거
+    assert os.environ["GHES_OWNER"] == "acme"          # `export ` 접두 허용
+
+
+def test_dotenv_shell_value_wins(tmp_path, monkeypatch):
+    """이미 셸/cron 이 export 한 값은 .env 가 덮어쓰지 않는다 (setdefault)."""
+    from karakeep_sync.cli import _load_dotenv_if_present
+    env = tmp_path / ".env"
+    env.write_text("KARAKEEP_API_KEY=from-file\n")
+    monkeypatch.setenv("KARAKEEP_API_KEY", "from-shell")
+
+    _load_dotenv_if_present(env)
+
+    import os
+    assert os.environ["KARAKEEP_API_KEY"] == "from-shell"
+
+
+def test_dotenv_missing_file_is_noop(tmp_path):
+    from karakeep_sync.cli import _load_dotenv_if_present
+    _load_dotenv_if_present(tmp_path / "does-not-exist.env")  # raises 없이 통과
+
+
+def test_dotenv_ignores_comments_and_blanks(tmp_path, monkeypatch):
+    from karakeep_sync.cli import _load_dotenv_if_present
+    env = tmp_path / ".env"
+    env.write_text("# comment\n\n   \nFOO=bar\n")
+    monkeypatch.delenv("FOO", raising=False)
+
+    _load_dotenv_if_present(env)
+
+    import os
+    assert os.environ["FOO"] == "bar"
