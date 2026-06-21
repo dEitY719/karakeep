@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 import yaml
@@ -34,7 +35,22 @@ class Config:
 
 
 def _expand(value: str) -> str:
-    return os.path.expandvars(str(value))
+    """${VAR} 를 환경변수로 치환한다.
+
+    os.path.expandvars 는 정의되지 않은 ${VAR} 를 조용히 그대로 남겨서, 예를 들어
+    remote URL 에 리터럴 ${GHES_OWNER} 가 박힌 채 git clone 이 엉뚱하게 실패한다.
+    그런 침묵 실패 대신, 미치환 ${VAR} 가 남으면 어떤 변수가 비었는지 명확히 알린다.
+    """
+    expanded = os.path.expandvars(str(value))
+    unresolved = re.findall(r"\$\{(\w+)\}", expanded)
+    if unresolved:
+        names = ", ".join(sorted(set(unresolved)))
+        raise ValueError(
+            f"환경변수가 설정되지 않았습니다: {names}. "
+            f".env 에 추가한 뒤 'set -a && source ../.env && set +a' 로 다시 주입하세요. "
+            f"(원본: {value})"
+        )
+    return expanded
 
 
 def load_config(
