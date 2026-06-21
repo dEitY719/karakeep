@@ -108,3 +108,49 @@ def test_non_internal_mode_is_home(tmp_path):
         config_file.write_text(SAMPLE_YAML)
         config = load_config(config_path=config_file, mode_file=mode_file)
         assert config.is_work is False
+
+
+def test_unresolved_env_var_raises(tmp_path, monkeypatch):
+    # 정의되지 않은 ${GHES_OWNER} 는 조용히 리터럴로 남지 않고 명확히 실패해야 한다
+    # (그러지 않으면 git clone 이 ${GHES_OWNER} 가 박힌 URL 로 엉뚱하게 깨진다).
+    monkeypatch.delenv("GHES_OWNER", raising=False)
+    monkeypatch.delenv("GHES_PAT", raising=False)
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("internal")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "karakeep": {"url": "http://localhost:3000", "api_key": "k"},
+        "vault_root": "/tmp/vault",
+        "repos": {
+            "company": {
+                "path": "Company",
+                "remote": "https://${GHES_PAT}@ghes.internal/${GHES_OWNER}/c.git",
+                "include_lists": ["Company"],
+            },
+        },
+        "logs": {"dir": "/tmp/logs", "retention_days": 30},
+    }))
+    with pytest.raises(ValueError, match="GHES_OWNER"):
+        load_config(config_path=config_file, mode_file=mode_file)
+
+
+def test_defined_env_var_is_expanded(tmp_path, monkeypatch):
+    monkeypatch.setenv("GHES_PAT", "tok")
+    monkeypatch.setenv("GHES_OWNER", "byoungwoo-yoon")
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("internal")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "karakeep": {"url": "http://localhost:3000", "api_key": "k"},
+        "vault_root": "/tmp/vault",
+        "repos": {
+            "company": {
+                "path": "Company",
+                "remote": "https://${GHES_PAT}@ghes.internal/${GHES_OWNER}/c.git",
+                "include_lists": ["Company"],
+            },
+        },
+        "logs": {"dir": "/tmp/logs", "retention_days": 30},
+    }))
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.repos["company"].remote == "https://tok@ghes.internal/byoungwoo-yoon/c.git"
