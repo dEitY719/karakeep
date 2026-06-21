@@ -6,6 +6,7 @@
 
 - Docker, Docker Compose
 - Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (Python 패키지·가상환경 관리) — [mise](https://mise.jdx.dev/)로 함께 관리 권장
 - Git
 
 ## 최초 설치
@@ -26,11 +27,12 @@
     #   → .env 의 KARAKEEP_API_KEY= 에 붙여넣기
     #   GitHub/GHES PAT 는 github.com/settings/tokens 등에서 미리 발급해 함께 채움
 
-    # 3. sync 패키지 설치
+    # 3. sync 패키지 설치 (mise + uv)
     cd sync
-    python -m venv .venv
-    source .venv/bin/activate
-    pip install -e ".[dev]"
+    mise install        # mise.toml 의 python·uv 설치 (mise 사용 시; 미사용이면 생략)
+    uv sync             # .venv 생성 + 의존성 설치 (dev 포함)
+    #   이후 entry point 는 `uv run karakeep-sync ...` 로 실행 (또는 `mise run run`).
+    #   .venv 를 직접 활성화해 `karakeep-sync` 를 쓰려면: source .venv/bin/activate
 
     # 4. config 설정
     cp config.yaml.example config.yaml
@@ -51,21 +53,25 @@
     #         set -a && source ../.env && set +a
 
     # 5. 초기화 (git clone + cron 등록)
-    karakeep-sync init
+    uv run karakeep-sync init
 
     # 6. 기존 북마크 import
-    karakeep-sync pull
+    uv run karakeep-sync pull
 
 ## 일상 사용
 
+`sync/` 디렉토리에서 실행 (또는 `.venv` 활성화 후 `karakeep-sync` 직접 호출):
+
 | 명령 | 설명 |
 |------|------|
-| `karakeep-sync push` | Karakeep → git push |
-| `karakeep-sync pull` | git pull → Karakeep import |
-| `karakeep-sync auto` | pull + push (cron 자동 실행) |
-| `karakeep-sync status` | 미동기 북마크 수 확인 |
+| `uv run karakeep-sync push` | Karakeep → git push |
+| `uv run karakeep-sync pull` | git pull → Karakeep import |
+| `uv run karakeep-sync auto` | pull + push (cron 자동 실행) |
+| `uv run karakeep-sync status` | 미동기 북마크 수 확인 |
 
-cron은 `init` 시 자동 등록됨 (30분마다 `auto` 실행).
+cron은 `init` 시 자동 등록됨 (30분마다 `auto` 실행). cron 라인은
+`sync/.venv/bin/karakeep-sync` 절대 경로를 쓰므로 `uv sync` 로 만든 venv 에서
+그대로 동작함.
 
 ## Docker 운영
 
