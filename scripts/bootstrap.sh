@@ -4,7 +4,7 @@
 # 신규 PC(Windows+WSL)에서 한 번 실행하면:
 #   1) Windows 사용자 자동 탐지 → ObsidianVault-PARA 경로 확정
 #   2) Windows vault 자동 생성 (PARA 골격 + .obsidian/Dataview + 대시보드)
-#   3) python venv + karakeep-sync 설치
+#   3) uv sync (venv + karakeep-sync 설치)
 #   4) ~/.dotfiles-setup-mode 기반 config.yaml / .env / docker override 생성
 #   5) docker compose up + karakeep-sync init
 #
@@ -213,11 +213,12 @@ else
   warn "sync/stignore 템플릿 없음 → Syncthing .stignore 수동 배치 필요 (§6)"
 fi
 
-# ---------- 4. python venv + 설치 ----------
-say "4/8 sync 패키지 설치"
+# ---------- 4. uv sync (venv + 설치) ----------
+say "4/8 sync 패키지 설치 (uv)"
 cd "$SYNC_DIR"
-[ -d .venv ] || python3 -m venv .venv
-./.venv/bin/pip install -q -e ".[dev]" && ok "karakeep-sync 설치"
+command -v uv >/dev/null 2>&1 || die "uv 가 필요합니다 — https://docs.astral.sh/uv/ 설치 후 재실행"
+# uv sync: .venv 생성 + 의존성 + dev 그룹(pytest) 설치. dev 는 기본 그룹이라 자동 포함.
+uv sync -q && ok "karakeep-sync 설치 (uv sync — .venv + dev 의존성)"
 SYNC_BIN="$SYNC_DIR/.venv/bin/karakeep-sync"
 
 # ---------- 5. config.yaml (모드별) ----------
@@ -357,7 +358,7 @@ if [ "$ENV_OK" = 1 ]; then
   ( cd "$SYNC_DIR" && set -a && . "$REPO_ROOT/.env" && set +a && "$SYNC_BIN" init ) && ok "karakeep-sync init 완료"
 else
   warn "KARAKEEP_API_KEY 미입력 → init 보류. .env 채운 뒤 수동 실행:"
-  echo "    cd $SYNC_DIR && source .venv/bin/activate && set -a && source ../.env && set +a && karakeep-sync init"
+  echo "    cd $SYNC_DIR && set -a && source ../.env && set +a && uv run karakeep-sync init"
 fi
 
 # ---------- 안내 ----------

@@ -84,7 +84,7 @@ repos:
 2. `~/.dotfiles-setup-mode` 읽어 모드 결정 (internal/external/home).
 3. **Windows vault 자동 생성**: PARA 골격 폴더 + `.obsidian/`(Dataview 플러그인
    다운로드·활성화) + `Bookmarks Dashboard.md`. ← 사용자 #2 필수 요구.
-4. Python venv + `pip install -e sync[dev]`.
+4. `uv sync` (sync/ 에 `.venv` + 의존성·dev 그룹 설치).
 5. `config.yaml` 을 템플릿에서 생성 (탐지한 vault 경로 + 모드별 repos).
 6. `.env` 를 `.env.example` 에서 만들고 비밀값(API key/PAT) 입력 안내.
 7. 모드별 `docker-compose.override.yml` 생성:
