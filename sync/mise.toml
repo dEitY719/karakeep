@@ -1,0 +1,17 @@
+# mise.toml — Tool versions + task SSOT (migrated by devx:mise-migrate)
+#
+# Daily use:
+#   mise run test   # pytest
+#   mise run run    # karakeep-sync
+
+[tools]
+python = "3.11"     # from requires-python floor; bump freely
+uv     = "0.10.12"
+
+[tasks.test]
+description = "전체 테스트"
+run = "uv run pytest"
+
+[tasks.run]
+description = "Run the project entry point"
+run = "uv run karakeep-sync"
