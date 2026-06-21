@@ -203,13 +203,49 @@ cd "$SYNC_DIR"
 ./.venv/bin/pip install -q -e ".[dev]" && ok "karakeep-sync 설치"
 SYNC_BIN="$SYNC_DIR/.venv/bin/karakeep-sync"
 
-# ---------- 5. config.yaml ----------
-say "5/8 config.yaml 생성"
-if [ -f "$SYNC_DIR/config.yaml" ]; then
-  warn "config.yaml 이미 존재 → 유지 (vault_root 만 점검하세요)"
+# ---------- 5. config.yaml (모드별) ----------
+say "5/8 config.yaml 생성 (모드: $MODE)"
+CFG="$SYNC_DIR/config.yaml"
+if [ -f "$CFG" ]; then
+  warn "config.yaml 이미 존재 → 유지 (vault_root/url 만 점검하세요)"
 else
-  sed "s#^vault_root:.*#vault_root: $VAULT#" "$SYNC_DIR/config.yaml.example" > "$SYNC_DIR/config.yaml"
-  ok "config.yaml 생성 (vault_root=$VAULT)"
+  # 모드별 구성:
+  #   external : 공유 Karakeep 호스트(localhost) + 공용 북마크(GitHub), Company 제외.
+  #   internal : 공유 인스턴스(sync 클라이언트) + 사내 북마크(GHES) only.
+  #   home     : 공유 인스턴스(sync 클라이언트) + 공용 북마크(GitHub), Company 제외.
+  # ⚠️ 공유 인스턴스 URL·사내 GHES owner 는 공개 repo 에 못 박지 않고 .env 변수로
+  #    둔다(config.py 가 ${...} 를 런타임에 치환). config.yaml 자체도 gitignore 됨.
+  {
+    echo "# bootstrap.sh 생성 (mode=$MODE) — 머신 로컬(gitignore). SSOT: docs/pc-environment.md"
+    echo "karakeep:"
+    if [ "$MODE" = external ]; then
+      echo "  url: http://localhost:3001"
+    else
+      echo "  url: \${KARAKEEP_URL}        # .env 의 공유 인스턴스 URL (예: Tailscale Funnel)"
+    fi
+    echo "  api_key: \${KARAKEEP_API_KEY}"
+    echo "vault_root: $VAULT"
+    echo "repos:"
+    if [ "$MODE" = internal ]; then
+      echo "  company:"
+      echo "    path: 80-Company/Bookmarks"
+      echo "    remote: https://\${GHES_PAT}@\${GHES_HOST}/\${GHES_OWNER}/bookmarks-company.git"
+      echo "    pull: true"
+      echo "    include_lists: [Company]   # Company 리스트만 GHES 로 (화이트리스트)"
+    else
+      echo "  common:"
+      echo "    path: 30-Resource/Bookmarks"
+      echo "    remote: https://\${GITHUB_PAT}@github.com/dEitY719/bookmarks-common.git"
+      echo "    pull: true"
+      echo "    exclude_lists: [Company]   # Company(사내) 는 공개 repo 에서 제외 (유출 방지)"
+    fi
+    echo "logs:"
+    echo "  dir: ~/apps/karakeep/logs"
+    echo "  retention_days: 30"
+  } > "$CFG"
+  ok "config.yaml 생성 (mode=$MODE, vault_root=$VAULT)"
+  [ "$MODE" != external ] && warn "공유 인스턴스 URL 을 .env 의 KARAKEEP_URL 에 설정하세요 (미설정 시 빈 URL 로 실패)."
+  [ "$MODE" = internal ] && warn "사내 GHES owner 를 .env 의 GHES_OWNER 에 설정하세요 (예: byoungwoo-yoon)."
 fi
 
 # ---------- 6. .env ----------
@@ -218,7 +254,12 @@ if [ -f "$REPO_ROOT/.env" ]; then
   ok ".env 이미 존재 → 유지"
 else
   cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env"
-  warn ".env 생성됨 — 비밀값을 채우세요: NEXTAUTH_SECRET, (기동 후)KARAKEEP_API_KEY, GITHUB_PAT$([ "$MODE" = internal ] && echo ', GHES_PAT, GHES_HOST')"
+  # 모드별로 실제 채워야 하는 비밀값만 안내한다.
+  NEED="KARAKEEP_API_KEY"
+  [ "$SYNC_HOST" = 0 ] && NEED="NEXTAUTH_SECRET, $NEED"
+  [ "$MODE" != external ] && NEED="$NEED, KARAKEEP_URL"
+  if [ "$MODE" = internal ]; then NEED="$NEED, GHES_PAT, GHES_HOST, GHES_OWNER"; else NEED="$NEED, GITHUB_PAT"; fi
+  warn ".env 생성됨 — 비밀값을 채우세요: $NEED"
 fi
 
 # ---------- 7. docker-compose.override.yml (모드별) ----------
