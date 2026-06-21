@@ -144,6 +144,14 @@ if [ ! -f "$CP" ] || ! grep -q dataview "$CP" 2>/dev/null; then
   echo '["dataview"]' > "$CP"
 fi
 # 대시보드 노트 (Bookmarks 폴더 밖 = git 제외). 없을 때만 생성.
+# Dataview FROM 절은 internal/external/home 공통 통합 쿼리다 (이슈 #27):
+#   - 30-Resource/Bookmarks : 공용 북마크 (전 PC 존재).
+#   - 80-Company/Bookmarks  : 사내 북마크. vault-notes .stignore 가 80-Company 를
+#     통째로 제외하고 external/home 은 vault-company 공유에 불참하므로 그 PC 에는
+#     폴더 자체가 없다 → OR 대상이어도 결과에 잡히지 않는다.
+# 따라서 OR 조합은 모든 모드에서 안전하다: external/home 은 공용만, internal 은
+# 공용+사내 북마크가 함께 표시된다. 대시보드는 vault-notes 로 전 PC 공유되므로
+# 모드별로 다른 내용을 쓰면 Syncthing 충돌 → 단일 통합 쿼리가 정답.
 DASH="$VAULT/30-Resource/Bookmarks Dashboard.md"
 if [ ! -f "$DASH" ]; then
   cat > "$DASH" <<'EOF'
@@ -159,7 +167,7 @@ tags: [dashboard]
 ## 🏷️ 태그별 분류
 ```dataview
 TABLE WITHOUT ID map(rows, (r) => elink(r.url, r.title)) AS "북마크", length(rows) AS "수"
-FROM "30-Resource/Bookmarks"
+FROM "30-Resource/Bookmarks" OR "80-Company/Bookmarks"
 FLATTEN tags AS tag
 GROUP BY tag AS "태그"
 SORT length(rows) DESC
@@ -168,10 +176,19 @@ SORT length(rows) DESC
 ## 🆕 최근 추가순
 ```dataview
 TABLE WITHOUT ID elink(url, title) AS "북마크", tags AS "태그", created AS "추가일"
-FROM "30-Resource/Bookmarks"
+FROM "30-Resource/Bookmarks" OR "80-Company/Bookmarks"
 SORT created DESC
 ```
 EOF
+  ok "대시보드 생성 (통합 쿼리)"
+else
+  # 구버전 대시보드 마이그레이션: 단일 경로 FROM → 통합 OR. 멱등(이미 OR 면 no-op).
+  if grep -q '^FROM "30-Resource/Bookmarks"$' "$DASH"; then
+    sed -i 's#^FROM "30-Resource/Bookmarks"$#FROM "30-Resource/Bookmarks" OR "80-Company/Bookmarks"#' "$DASH"
+    ok "대시보드 FROM 절 통합 쿼리로 갱신 (#27)"
+  else
+    ok "대시보드 이미 통합 쿼리 (유지)"
+  fi
 fi
 ok "PARA 골격 + 대시보드 준비"
 
