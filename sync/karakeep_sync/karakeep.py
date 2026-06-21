@@ -1,6 +1,27 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+import os
+import ssl
 import httpx
+
+
+def _make_ssl_context() -> ssl.SSLContext:
+    """사내 MITM 프록시 CA 를 받아들이는 SSL context 를 만든다.
+
+    Python 3.12+/OpenSSL 3.x 의 ``VERIFY_X509_STRICT`` 는 RFC 5280 을 어긴 CA
+    cert(예: McAfee MITM 프록시처럼 ``basicConstraints`` 가 critical 로 마킹되지
+    않은 경우)를 거부한다. 사내망에서 흔한 형태라 이 플래그만 떼어낸다 —
+    체인·호스트명 검증은 그대로 유지되므로 신뢰 목록에 없는 CA 는 여전히 막힌다.
+
+    ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` 로 사내 CA 번들을 주입할 수 있다.
+    """
+    ctx = ssl.create_default_context()
+    if hasattr(ssl, "VERIFY_X509_STRICT"):
+        ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    ca_bundle = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+    if ca_bundle:
+        ctx.load_verify_locations(cafile=ca_bundle)
+    return ctx
 
 
 @dataclass
@@ -57,13 +78,16 @@ class KarakeepClient:
     def __init__(self, base_url: str, api_key: str) -> None:
         self._base = base_url.rstrip("/")
         self._headers = {"Authorization": f"Bearer {api_key}"}
+        # 모듈 레벨 httpx.* 대신 세션 Client 를 쓴다 — 사내 MITM 프록시용 SSL
+        # context 를 주입할 단일 지점이자 커넥션 재사용 효과도 얻는다.
+        self._http = httpx.Client(verify=_make_ssl_context())
 
     def get_all_bookmarks(self) -> list[Bookmark]:
         results = []
         cursor: str | None = None
         while True:
             params = {"cursor": cursor} if cursor else {}
-            resp = httpx.get(
+            resp = self._http.get(
                 f"{self._base}/api/v1/bookmarks",
                 headers=self._headers,
                 params=params,
@@ -81,7 +105,7 @@ class KarakeepClient:
         payload: dict = {"type": "link", "url": bm.url, "title": bm.title}
         if bm.note:
             payload["note"] = bm.note
-        resp = httpx.post(
+        resp = self._http.post(
             f"{self._base}/api/v1/bookmarks", json=payload, headers=self._headers
         )
         resp.raise_for_status()
@@ -98,7 +122,7 @@ class KarakeepClient:
         """
         if not tags:
             return
-        resp = httpx.post(
+        resp = self._http.post(
             f"{self._base}/api/v1/bookmarks/{bookmark_id}/tags",
             json={"tags": [{"tagName": t} for t in tags]},
             headers=self._headers,
@@ -107,7 +131,7 @@ class KarakeepClient:
 
     def update_bookmark(self, bookmark_id: str, bm: Bookmark) -> None:
         payload = {"title": bm.title, "note": bm.note}
-        resp = httpx.patch(
+        resp = self._http.patch(
             f"{self._base}/api/v1/bookmarks/{bookmark_id}",
             json=payload,
             headers=self._headers,
@@ -116,7 +140,7 @@ class KarakeepClient:
         self.add_tags(bookmark_id, bm.tags)
 
     def get_all_lists(self) -> list[BookmarkList]:
-        resp = httpx.get(f"{self._base}/api/v1/lists", headers=self._headers)
+        resp = self._http.get(f"{self._base}/api/v1/lists", headers=self._headers)
         resp.raise_for_status()
         return [
             BookmarkList(id=l["id"], name=l["name"], parent_id=l.get("parentId"))
@@ -128,7 +152,7 @@ class KarakeepClient:
         cursor: str | None = None
         while True:
             params = {"cursor": cursor} if cursor else {}
-            resp = httpx.get(
+            resp = self._http.get(
                 f"{self._base}/api/v1/lists/{list_id}/bookmarks",
                 headers=self._headers,
                 params=params,
