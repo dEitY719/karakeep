@@ -31,6 +31,10 @@ def bookmark_to_md(bm: Bookmark) -> str:
         "updated": bm.updated,
         "source": "karakeep",
     }
+    # 리스트 멤버십은 full path 그대로 보존한다 (Obsidian Properties/Dataview 로 필터링).
+    # 태그와 달리 slugify 하지 않는다 — 한글 경로·공백·'/' 계층을 사람이 읽는 그대로 둔다.
+    if bm.lists:
+        frontmatter["lists"] = list(bm.lists)
     fm = yaml.dump(frontmatter, allow_unicode=True, default_flow_style=False).strip()
     body = bm.note.strip()
     if body:
@@ -52,4 +56,5 @@ def md_to_bookmark(content: str) -> Bookmark:
         created=str(fm["created"]),
         updated=str(fm["updated"]),
         note=note,
+        lists=fm.get("lists") or [],
     )

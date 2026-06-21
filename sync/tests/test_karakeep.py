@@ -157,3 +157,57 @@ def test_add_tags_empty_is_noop(httpx_mock: HTTPXMock):
     client = KarakeepClient(BASE, KEY)
     client.add_tags("abc", [])
     assert httpx_mock.get_requests() == []
+
+
+# --- 리스트(폴더) 멤버십 → frontmatter (#A) ---
+
+LISTS_RESPONSE = {
+    "lists": [
+        {"id": "us", "name": "미국 주식 사이트", "parentId": None},
+        {"id": "ipo", "name": "11 IPO·SPAC", "parentId": "us"},
+        {"id": "ai", "name": "AI 도구", "parentId": None},
+    ]
+}
+
+
+def test_build_list_paths_resolves_nested():
+    from karakeep_sync.karakeep import BookmarkList, build_list_paths
+    lists = [
+        BookmarkList("us", "미국 주식 사이트", None),
+        BookmarkList("ipo", "11 IPO·SPAC", "us"),
+        BookmarkList("ai", "AI 도구", None),
+    ]
+    paths = build_list_paths(lists)
+    assert paths["us"] == "미국 주식 사이트"
+    assert paths["ipo"] == "미국 주식 사이트/11 IPO·SPAC"
+    assert paths["ai"] == "AI 도구"
+
+
+def test_get_all_lists(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="GET", url=f"{BASE}/api/v1/lists", json=LISTS_RESPONSE)
+    client = KarakeepClient(BASE, KEY)
+    lists = client.get_all_lists()
+    assert {l.id for l in lists} == {"us", "ipo", "ai"}
+    ipo = next(l for l in lists if l.id == "ipo")
+    assert ipo.name == "11 IPO·SPAC"
+    assert ipo.parent_id == "us"
+
+
+def test_get_bookmark_list_paths(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(method="GET", url=f"{BASE}/api/v1/lists", json=LISTS_RESPONSE)
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/api/v1/lists/us/bookmarks",
+        json={"bookmarks": []},
+    )
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/api/v1/lists/ipo/bookmarks",
+        json={"bookmarks": [{"id": "bm1"}]},
+    )
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/api/v1/lists/ai/bookmarks",
+        json={"bookmarks": [{"id": "bm1"}, {"id": "bm2"}]},
+    )
+    client = KarakeepClient(BASE, KEY)
+    paths = client.get_bookmark_list_paths()
+    assert paths["bm1"] == ["AI 도구", "미국 주식 사이트/11 IPO·SPAC"]  # sorted
+    assert paths["bm2"] == ["AI 도구"]

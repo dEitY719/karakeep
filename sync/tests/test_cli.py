@@ -58,6 +58,81 @@ def test_push_creates_md_and_calls_git(tmp_path):
     mock_save.assert_called_once()
 
 
+def test_push_writes_lists_to_frontmatter(tmp_path):
+    config = make_config(tmp_path)
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value={}),
+        patch("karakeep_sync.cli.save_state"),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+        patch("karakeep_sync.cli.commit_and_push"),
+    ):
+        mc = MockClient.return_value
+        mc.get_all_bookmarks.return_value = [NEW_BM]
+        mc.get_bookmark_list_paths.return_value = {
+            "abc123": ["AI 도구", "미국 주식 사이트/11 IPO·SPAC"]
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["push"])
+
+    assert result.exit_code == 0, result.output
+    md = (config.repos["common"].path / "abc123.md").read_text()
+    assert "lists:" in md
+    assert "미국 주식 사이트/11 IPO·SPAC" in md
+
+
+def test_push_force_reexports_unchanged(tmp_path):
+    config = make_config(tmp_path)
+    # 이미 같은 타임스탬프로 내보낸 상태 → 평소엔 skip 되지만 --force 는 다시 쓴다.
+    existing_state = {
+        "abc123": BookmarkState(updated="2024-01-02T00:00:00Z", repo="common", imported=False)
+    }
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value=existing_state),
+        patch("karakeep_sync.cli.save_state"),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+        patch("karakeep_sync.cli.commit_and_push") as mock_git,
+    ):
+        mc = MockClient.return_value
+        mc.get_all_bookmarks.return_value = [NEW_BM]
+        mc.get_bookmark_list_paths.return_value = {"abc123": ["AI 도구"]}
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["push", "--force"])
+
+    assert result.exit_code == 0, result.output
+    assert (config.repos["common"].path / "abc123.md").exists()
+    mock_git.assert_called_once()
+
+
+def test_push_without_force_skips_unchanged(tmp_path):
+    config = make_config(tmp_path)
+    existing_state = {
+        "abc123": BookmarkState(updated="2024-01-02T00:00:00Z", repo="common", imported=False)
+    }
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value=existing_state),
+        patch("karakeep_sync.cli.save_state"),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+        patch("karakeep_sync.cli.commit_and_push") as mock_git,
+    ):
+        mc = MockClient.return_value
+        mc.get_all_bookmarks.return_value = [NEW_BM]
+        mc.get_bookmark_list_paths.return_value = {"abc123": ["AI 도구"]}
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["push"])
+
+    assert result.exit_code == 0, result.output
+    mock_git.assert_not_called()
+
+
 def test_push_skips_imported_bookmark(tmp_path):
     config = make_config(tmp_path)
     existing_state = {
