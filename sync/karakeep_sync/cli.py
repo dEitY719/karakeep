@@ -60,12 +60,16 @@ def import_chrome(file: Path, commit: bool, no_folder_tags: bool,
 
 
 @cli.command()
-def push() -> None:
+@click.option("--force", is_flag=True,
+              help="타임스탬프 변화가 없어도 전체 재내보내기 (리스트 멤버십 백필용)")
+def push(force: bool) -> None:
     """Karakeep → Markdown → git push"""
     config = load_config()
     state = load_state()
     client = KarakeepClient(config.karakeep_url, config.karakeep_api_key)
     bookmarks = client.get_all_bookmarks()
+    # 북마크 id → 소속 리스트 full path. frontmatter 의 lists 필드로 단방향 반영한다.
+    list_paths = client.get_bookmark_list_paths()
 
     for repo_name, repo in config.repos.items():
         if not repo.push:
@@ -76,9 +80,10 @@ def push() -> None:
             bm_state = state.get(bm.id)
             if bm_state and bm_state.imported:
                 continue
-            if bm_state and bm_state.updated >= bm.updated:
+            if not force and bm_state and bm_state.updated >= bm.updated:
                 continue
 
+            bm.lists = list_paths.get(bm.id, [])
             md_path = repo.path / bookmark_filename(bm)
             md_path.parent.mkdir(parents=True, exist_ok=True)
             md_path.write_text(bookmark_to_md(bm))

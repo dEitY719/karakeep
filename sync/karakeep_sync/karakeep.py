@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import httpx
 
 
@@ -12,6 +12,33 @@ class Bookmark:
     created: str
     updated: str
     note: str = ""
+    # Karakeep 리스트(폴더) 멤버십을 full path 로 담는다 (예: "미국 주식 사이트/11 IPO·SPAC").
+    # 단방향(Karakeep → Obsidian frontmatter)으로만 쓰며 pull 시 Karakeep 으로 되돌리지 않는다.
+    lists: list[str] = field(default_factory=list)
+
+
+@dataclass
+class BookmarkList:
+    id: str
+    name: str
+    parent_id: str | None
+
+
+def build_list_paths(lists: list[BookmarkList]) -> dict[str, str]:
+    """리스트 id → full path(부모/자식) 를 만든다.
+
+    중첩 리스트는 부모 이름을 '/' 로 이어 사람이 읽는 경로로 만든다 — Obsidian
+    frontmatter 에 그대로 노출해 Dataview/Properties 로 필터링하기 위함이다.
+    """
+    by_id = {l.id: l for l in lists}
+
+    def resolve(lid: str) -> str:
+        node = by_id[lid]
+        if node.parent_id and node.parent_id in by_id:
+            return f"{resolve(node.parent_id)}/{node.name}"
+        return node.name
+
+    return {l.id: resolve(l.id) for l in lists}
 
 
 class KarakeepClient:
@@ -75,6 +102,47 @@ class KarakeepClient:
         )
         resp.raise_for_status()
         self.add_tags(bookmark_id, bm.tags)
+
+    def get_all_lists(self) -> list[BookmarkList]:
+        resp = httpx.get(f"{self._base}/api/v1/lists", headers=self._headers)
+        resp.raise_for_status()
+        return [
+            BookmarkList(id=l["id"], name=l["name"], parent_id=l.get("parentId"))
+            for l in resp.json()["lists"]
+        ]
+
+    def _list_bookmark_ids(self, list_id: str) -> list[str]:
+        ids: list[str] = []
+        cursor: str | None = None
+        while True:
+            params = {"cursor": cursor} if cursor else {}
+            resp = httpx.get(
+                f"{self._base}/api/v1/lists/{list_id}/bookmarks",
+                headers=self._headers,
+                params=params,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            ids.extend(item["id"] for item in data["bookmarks"])
+            cursor = data.get("nextCursor")
+            if not cursor:
+                break
+        return ids
+
+    def get_bookmark_list_paths(self) -> dict[str, list[str]]:
+        """북마크 id → 소속 리스트 full path 목록(정렬)을 만든다.
+
+        리스트 단위로 멤버를 조회(~리스트 수 만큼 호출)해 N+1 을 피한다.
+        """
+        lists = self.get_all_lists()
+        paths = build_list_paths(lists)
+        out: dict[str, list[str]] = {}
+        for lst in lists:
+            for bid in self._list_bookmark_ids(lst.id):
+                out.setdefault(bid, []).append(paths[lst.id])
+        for bid in out:
+            out[bid].sort()
+        return out
 
     def _parse(self, item: dict) -> Bookmark:
         # URL/title 은 link 타입의 경우 content 안에 중첩되어 온다.

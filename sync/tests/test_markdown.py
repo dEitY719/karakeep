@@ -63,6 +63,37 @@ def test_bookmark_to_md_slugifies_spaced_tags():
     assert "Design Patterns" not in md  # 공백 태그가 그대로 남으면 Obsidian 에서 깨짐
 
 
+def test_bookmark_to_md_includes_lists():
+    bm = Bookmark(
+        id="x", url="https://x.com", title="X", tags=[],
+        created="2024-01-01T00:00:00Z", updated="2024-01-01T00:00:00Z", note="",
+        lists=["미국 주식 사이트/11 IPO·SPAC", "투자전략·백테스트"],
+    )
+    md = bookmark_to_md(bm)
+    assert "lists:" in md
+    assert "미국 주식 사이트/11 IPO·SPAC" in md
+    assert "투자전략·백테스트" in md
+
+
+def test_bookmark_to_md_omits_lists_when_empty():
+    bm = Bookmark(
+        id="x", url="https://x.com", title="X", tags=[],
+        created="2024-01-01T00:00:00Z", updated="2024-01-01T00:00:00Z", note="",
+    )
+    md = bookmark_to_md(bm)
+    assert "lists:" not in md
+
+
+def test_md_to_bookmark_roundtrips_lists():
+    bm = Bookmark(
+        id="x", url="https://x.com", title="X", tags=["topic/python"],
+        created="2024-01-01T00:00:00Z", updated="2024-01-01T00:00:00Z", note="",
+        lists=["미국 주식 사이트/11 IPO·SPAC"],
+    )
+    result = md_to_bookmark(bookmark_to_md(bm))
+    assert result.lists == ["미국 주식 사이트/11 IPO·SPAC"]
+
+
 def test_md_to_bookmark_no_note():
     bm_no_note = Bookmark(
         id="xyz", url="https://x.com", title="X",
