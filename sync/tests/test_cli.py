@@ -364,6 +364,31 @@ def test_status_shows_pending_count(tmp_path):
     assert "1" in result.output
 
 
+def test_status_excludes_unroutable_bookmark(tmp_path):
+    """어느 push repo 로도 라우팅되지 않는 북마크(예: external PC 의 Company)는
+    pending 에서 빠진다 — status 가 push 와 같은 리스트 라우팅을 적용해야 한다."""
+    config = make_config(tmp_path)
+    config.repos["common"].exclude_lists = ["Company"]
+    company_bm = Bookmark(
+        id="comp1", url="https://kor2.samsung.net/portalapp/home", title="사내",
+        tags=[], created="2024-01-01T00:00:00Z", updated="2024-01-02T00:00:00Z", note="",
+    )
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value={}),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+    ):
+        mc = MockClient.return_value
+        mc.get_all_bookmarks.return_value = [company_bm]
+        mc.get_bookmark_list_paths.return_value = {"comp1": ["Company"]}
+        runner = CliRunner()
+        result = runner.invoke(cli, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "Pending push: 0 bookmark(s)" in result.output
+
+
 # --- .env 자동 로드 (#25) ---
 
 def test_dotenv_loads_keys(tmp_path, monkeypatch):

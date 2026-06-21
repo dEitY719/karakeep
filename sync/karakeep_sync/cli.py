@@ -5,9 +5,9 @@ import os
 import subprocess
 import click
 
-from karakeep_sync.config import load_config
+from karakeep_sync.config import load_config, RepoConfig
 from karakeep_sync.state import load_state, save_state, BookmarkState
-from karakeep_sync.karakeep import KarakeepClient, bookmark_in_any_list
+from karakeep_sync.karakeep import KarakeepClient, Bookmark, bookmark_in_any_list
 from karakeep_sync.markdown import bookmark_to_md, bookmark_filename, md_to_bookmark
 from karakeep_sync.git_ops import pull, changed_files_after_pull, commit_and_push
 from karakeep_sync import chrome_import
@@ -42,6 +42,35 @@ def _load_dotenv_if_present(env_file: Path = ENV_PATH) -> None:
 def cli() -> None:
     # 모든 서브커맨드 진입 전 .env 주입 — push/pull/auto/status/init/import-chrome 공통.
     _load_dotenv_if_present()
+
+
+def _bookmark_needs_push(
+    bm: Bookmark, bm_state: BookmarkState | None, *, force: bool = False
+) -> bool:
+    """state 기준으로 이 북마크가 아직 push 대상인지 판단한다 (리스트 라우팅은 별도).
+
+    - pull 로 들어온 북마크(imported)는 되돌려 export 하지 않는다.
+    - 마지막 export 이후 타임스탬프 변화가 없으면 skip (--force 면 무시).
+    """
+    if bm_state and bm_state.imported:
+        return False
+    if not force and bm_state and bm_state.updated >= bm.updated:
+        return False
+    return True
+
+
+def _repo_accepts_bookmark(repo: RepoConfig, bm_lists: list[str]) -> bool:
+    """리스트 라우팅(include/exclude)상 이 repo 가 이 북마크를 받는지 판단한다.
+
+    push 와 status 가 공유하는 단일 판정 — 과거 status 는 이 필터를 적용하지 않아,
+    어느 push repo 로도 라우팅되지 않는 북마크(예: external PC 의 Company 북마크)를
+    영원히 'Pending push' 로 잘못 셌다.
+    """
+    if repo.include_lists and not bookmark_in_any_list(bm_lists, repo.include_lists):
+        return False
+    if bookmark_in_any_list(bm_lists, repo.exclude_lists):
+        return False
+    return True
 
 
 @cli.command(name="import-chrome")
@@ -104,19 +133,12 @@ def push(force: bool) -> None:
 
         changed: list[Path] = []
         for bm in bookmarks:
-            bm_state = state.get(bm.id)
-            if bm_state and bm_state.imported:
-                continue
-            if not force and bm_state and bm_state.updated >= bm.updated:
+            if not _bookmark_needs_push(bm, state.get(bm.id), force=force):
                 continue
 
             bm.lists = list_paths.get(bm.id, [])
-            # repo 별 리스트 라우팅:
-            #  - include_lists 지정 시 그 리스트 북마크만 export (예: 회사 GHES repo = Company 만)
-            #  - exclude_lists 에 속하면 제외 (예: 공개 github repo 에서 Company 제외 — 유출 방지)
-            if repo.include_lists and not bookmark_in_any_list(bm.lists, repo.include_lists):
-                continue
-            if bookmark_in_any_list(bm.lists, repo.exclude_lists):
+            # repo 별 리스트 라우팅 (include_lists / exclude_lists). status 와 동일 판정.
+            if not _repo_accepts_bookmark(repo, bm.lists):
                 continue
             md_path = repo.path / bookmark_filename(bm)
             md_path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,11 +207,15 @@ def status() -> None:
     state = load_state()
     client = KarakeepClient(config.karakeep_url, config.karakeep_api_key)
     bookmarks = client.get_all_bookmarks()
+    list_paths = client.get_bookmark_list_paths()
 
+    push_repos = [repo for repo in config.repos.values() if repo.push]
+    # push 와 동일 판정: state 상 변경분이면서, 적어도 한 push repo 로 라우팅되는 것만 pending.
+    # 어느 repo 로도 안 가는 북마크(예: external PC 의 Company)는 영구 pending 오탐을 막는다.
     pending = [
         bm for bm in bookmarks
-        if (bm.id not in state or state[bm.id].updated < bm.updated)
-        and not (bm.id in state and state[bm.id].imported)
+        if _bookmark_needs_push(bm, state.get(bm.id))
+        and any(_repo_accepts_bookmark(repo, list_paths.get(bm.id, [])) for repo in push_repos)
     ]
     click.echo(f"Pending push: {len(pending)} bookmark(s)")
 
