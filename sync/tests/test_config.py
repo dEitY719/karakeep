@@ -77,6 +77,27 @@ def test_repo_exclude_lists_defaults_empty(tmp_path):
     config_file.write_text(SAMPLE_YAML)  # exclude_lists 미지정
     config = load_config(config_path=config_file, mode_file=mode_file)
     assert config.repos["common"].exclude_lists == []
+    assert config.repos["common"].include_lists == []
+
+
+def test_repo_include_lists_parsed(tmp_path):
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("internal")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "karakeep": {"url": "http://localhost:3000", "api_key": "k"},
+        "vault_root": "/tmp/vault",
+        "repos": {
+            "company": {
+                "path": "Company",
+                "remote": "https://t@ghes.internal/u/c.git",
+                "include_lists": ["Company"],
+            },
+        },
+        "logs": {"dir": "/tmp/logs", "retention_days": 30},
+    }))
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.repos["company"].include_lists == ["Company"]
 
 
 def test_non_internal_mode_is_home(tmp_path):

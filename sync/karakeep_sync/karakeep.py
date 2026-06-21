@@ -41,16 +41,16 @@ def build_list_paths(lists: list[BookmarkList]) -> dict[str, str]:
     return {l.id: resolve(l.id) for l in lists}
 
 
-def bookmark_in_excluded_list(bm_lists: list[str], exclude_lists: list[str]) -> bool:
-    """북마크가 제외 대상 top-level 리스트에 속하는지 판단한다.
+def bookmark_in_any_list(bm_lists: list[str], list_names: list[str]) -> bool:
+    """북마크가 주어진 top-level 리스트 중 하나에 속하는지 판단한다.
 
-    회사(사내) 북마크처럼 특정 리스트는 공개 repo export 에서 빼야 한다. 리스트
+    repo export 의 포함(include)/제외(exclude) 라우팅에 공통으로 쓴다. 리스트
     경로는 full path("Company/사내포털")이므로 최상위 이름만 비교한다 — 하위 폴더도
-    함께 제외되고, "Companywide" 같은 접두사 오탐은 막는다.
+    함께 매칭되고, "Companywide" 같은 접두사 오탐은 막는다.
     """
-    if not exclude_lists:
+    if not list_names:
         return False
-    return any(path.split("/", 1)[0] in exclude_lists for path in bm_lists)
+    return any(path.split("/", 1)[0] in list_names for path in bm_lists)
 
 
 class KarakeepClient:

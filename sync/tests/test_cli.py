@@ -164,6 +164,36 @@ def test_push_excludes_bookmarks_in_excluded_list(tmp_path):
     assert not (config.repos["common"].path / "comp1.md").exists()
 
 
+def test_push_include_lists_exports_only_matching(tmp_path):
+    config = make_config(tmp_path)
+    config.repos["common"].include_lists = ["Company"]  # 회사 repo 흉내: Company 만
+    company_bm = Bookmark(
+        id="comp1", url="https://kor2.samsung.net/portalapp/home", title="사내",
+        tags=[], created="2024-01-01T00:00:00Z", updated="2024-01-02T00:00:00Z", note="",
+    )
+
+    with (
+        patch("karakeep_sync.cli.load_config", return_value=config),
+        patch("karakeep_sync.cli.load_state", return_value={}),
+        patch("karakeep_sync.cli.save_state"),
+        patch("karakeep_sync.cli.KarakeepClient") as MockClient,
+        patch("karakeep_sync.cli.commit_and_push"),
+    ):
+        mc = MockClient.return_value
+        mc.get_all_bookmarks.return_value = [NEW_BM, company_bm]
+        mc.get_bookmark_list_paths.return_value = {
+            "abc123": ["미국 주식 사이트"],  # Company 아님 → 제외
+            "comp1": ["Company"],            # Company → export
+        }
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["push"])
+
+    assert result.exit_code == 0, result.output
+    assert (config.repos["common"].path / "comp1.md").exists()
+    assert not (config.repos["common"].path / "abc123.md").exists()
+
+
 def test_push_skips_imported_bookmark(tmp_path):
     config = make_config(tmp_path)
     existing_state = {

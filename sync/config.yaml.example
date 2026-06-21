@@ -21,6 +21,9 @@ repos:
     path: 80-Company/Bookmarks
     remote: https://${GHES_PAT}@${GHES_HOST}/dEitY719/bookmarks-company.git
     pull: true
+    # 'Company' 리스트 북마크만 GHES 로 export (전체 북마크가 사내 깃에 쌓이는 것 방지).
+    # exclude_lists 의 반대 — 화이트리스트. 회사 북마크는 Karakeep 'Company' 리스트에 넣는다.
+    include_lists: [Company]
 
 logs:
   dir: ~/apps/karakeep/logs
