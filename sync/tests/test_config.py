@@ -21,6 +21,24 @@ SAMPLE_YAML = yaml.dump({
     "logs": {"dir": "/tmp/logs", "retention_days": 30},
 })
 
+SAMPLE_YAML_WITH_COMPANY = yaml.dump({
+    "karakeep": {"url": "http://localhost:3000", "api_key": "test-key"},
+    "vault_root": "/tmp/vault",
+    "repos": {
+        "common": {
+            "path": "Common",
+            "remote": "https://TOKEN@github.com/user/common.git",
+            "exclude_lists": ["Company"],
+        },
+        "company": {
+            "path": "Company",
+            "remote": "https://TOKEN@ghes.internal/user/company.git",
+            "include_lists": ["Company"],
+        },
+    },
+    "logs": {"dir": "/tmp/logs", "retention_days": 30},
+})
+
 
 def test_home_mode_excludes_company_repo(tmp_path):
     mode_file = tmp_path / ".dotfiles-setup-mode"
@@ -132,6 +150,67 @@ def test_unresolved_env_var_raises(tmp_path, monkeypatch):
     }))
     with pytest.raises(ValueError, match="GHES_OWNER"):
         load_config(config_path=config_file, mode_file=mode_file)
+
+
+def test_company_lists_defaults_empty_without_company_repo(tmp_path):
+    # company repo 도 없고 명시 company_lists 도 없으면 가드레일은 꺼진 상태(빈 리스트).
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("public")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "karakeep": {"url": "http://localhost:3000", "api_key": "k"},
+        "vault_root": "/tmp/vault",
+        "repos": {
+            "common": {"path": "Common", "remote": "https://t@github.com/u/c.git"},
+        },
+        "logs": {"dir": "/tmp/logs", "retention_days": 30},
+    }))
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.company_lists == []
+
+
+def test_company_lists_derived_from_company_repo_even_in_public_mode(tmp_path):
+    # 핵심: external/home(public) 모드에선 company repo 가 드롭되지만, 사내 리스트 정의는
+    # raw config 에서 유도되어야 한다 — 안 그러면 유출 위험이 가장 큰 PC 에서 가드레일이 꺼진다.
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("public")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(SAMPLE_YAML_WITH_COMPANY)
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.is_work is False
+    assert "company" not in config.repos          # 모드상 드롭됨
+    assert config.company_lists == ["Company"]     # 그래도 사내 리스트는 인지
+
+
+def test_company_lists_explicit_top_level_overrides_derivation(tmp_path):
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("internal")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(yaml.dump({
+        "karakeep": {"url": "http://localhost:3000", "api_key": "k"},
+        "vault_root": "/tmp/vault",
+        "company_lists": ["Company", "사내"],
+        "repos": {
+            "company": {
+                "path": "Company",
+                "remote": "https://t@ghes.internal/u/c.git",
+                "include_lists": ["Company"],
+            },
+        },
+        "logs": {"dir": "/tmp/logs", "retention_days": 30},
+    }))
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.company_lists == ["Company", "사내"]
+
+
+def test_company_repo_is_flagged_is_company(tmp_path):
+    mode_file = tmp_path / ".dotfiles-setup-mode"
+    mode_file.write_text("internal")
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(SAMPLE_YAML_WITH_COMPANY)
+    config = load_config(config_path=config_file, mode_file=mode_file)
+    assert config.repos["company"].is_company is True
+    assert config.repos["common"].is_company is False
 
 
 def test_defined_env_var_is_expanded(tmp_path, monkeypatch):
