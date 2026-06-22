@@ -216,6 +216,26 @@ if [ "$MODE" = "internal" ]; then
     git -C "$CO_DIR" checkout main 2>/dev/null || true
   fi
   ok "80-Company/ (GHES obsidian-para) 사내 문서 read/write 준비됨"
+
+  # 7b. GHES obsidian-para 경계 가드 (§6.3): Bookmarks/ 는 .gitignore 로 제외돼야 한다.
+  # 아래 8단계가 bookmarks-company 를 80-Company/Bookmarks 에 중첩 클론하는데, GHES
+  # obsidian-para 가 그 경로를 ignore 하지 않으면 다음 commit 때 사내 vault repo 에
+  # 추적·embed 되어 churn/유출이 생긴다. §4b(공용 repo)와 대칭인 능동 차단. (순수 읽기 검사 → 멱등)
+  if [ -d "$CO_DIR/.git" ]; then
+    BM_SUBDIR="${COMPANY_BM_PATH#"$COMPANY_DIR"/}"   # 80-Company/Bookmarks → Bookmarks
+    tracked_bm="$(git -C "$CO_DIR" ls-files -- "$BM_SUBDIR" 2>/dev/null || true)"
+    if [ -n "$tracked_bm" ]; then
+      warn "GHES obsidian-para 에 북마크 경로($BM_SUBDIR)가 추적되고 있습니다 — 중첩 repo 유출 위험:"
+      printf '%s\n' "$tracked_bm" | sed 's/^/      /' >&2
+      die "GHES obsidian-para 의 .gitignore 에 '$BM_SUBDIR/' 를 추가하고
+           'git -C \"$CO_DIR\" rm -r --cached $BM_SUBDIR' 로 추적 해제 후 다시 실행하세요."
+    fi
+    if ! git -C "$CO_DIR" check-ignore -q "$BM_SUBDIR" 2>/dev/null; then
+      die "GHES obsidian-para 의 .gitignore 에 '$BM_SUBDIR/' 가 없습니다 (§6.3).
+           추가·커밋·push 한 뒤 다시 실행하세요 — 북마크 중첩 repo 유출/churn 방지."
+    fi
+    ok "GHES obsidian-para 경계 OK ($BM_SUBDIR 는 .gitignore 로 제외됨)"
+  fi
 fi
 
 # ── 8. internal 전용: 80-Company/Bookmarks (GHES bookmarks-company, read/write) ──
