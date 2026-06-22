@@ -106,8 +106,14 @@ repos:
   1. `80-Company/` 는 공용 `obsidian-para`(GitHub)에서 `.gitignore` 로 제외 → 공용 push 에 안 실림.
   2. internal 은 GitHub push 자체가 불가(pull-only) → 공용 영역에 잘못 둔 사내 글도 밖으로 못 나감.
   3. 전체-vault 동기화(§6)의 공용 공유는 `80-Company/` 를 통째 제외.
-- (TODO) **능동적 차단**: 사내 문서가 `80-Company/` 밖에 생기면 경고/거부하는 pre-sync 훅
-  또는 karakeep-sync 라우팅 검사 추가. 현재는 위 수동 규칙 + 구조적 방어에 의존.
+- **능동적 차단(구현됨)** — 위 구조적 방어에 더해 두 지점에서 능동 거부한다:
+  1. **북마크(karakeep-sync 라우팅)**: `company_lists`(예: `Company`)에 속한 북마크는
+     `is_company` repo(`80-Company/Bookmarks`, GHES)로만 export 된다. per-repo `exclude_lists`
+     설정이 누락돼도 공용 GitHub repo 로 새지 않으며, 사내 repo 가 없는 PC 에선 보류하고 경고한다.
+     (`sync/karakeep_sync/cli.py` `_repo_accepts_bookmark` 가드레일)
+  2. **노트/문서(pre-sync 가드)**: `scripts/vault-sync.sh` 가 push 정책 적용 전에 공용
+     `obsidian-para` 에 `80-Company/` 가 추적(tracked)되고 있으면 동기화를 **거부**한다
+     (`.gitignore` 누락 시 유출 방지).
 
 ## 5. 신규 PC 부트스트랩 (목표: 1-스크립트)
 
@@ -183,6 +189,3 @@ PC 간 공유되지만, 그 외 일반 노트(`10-Project`/`20-Area`/`30-Resourc
 3. internal 에서 `80-Company/docs/y.md` 생성 → GHES push → 다른 internal PC 에서 pull → 보임.
    동시에 external·home 에는 **나타나지 않음** 확인.
 4. 북마크 무충돌: 30분 cron 1회 후 `30-Resource/Bookmarks` 의 `git status` 가 깨끗한지 확인.
-
-> 정리 필요(별도 PR): Syncthing 폐기로 `sync/stignore/*.stignore` 템플릿과 §5 부트스트랩의
-> `.stignore` 배치 단계는 더 이상 쓰이지 않는다(제거 대상).

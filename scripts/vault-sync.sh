@@ -116,6 +116,20 @@ else
 fi
 ok "obsidian-para 동기화 완료 ($(git -C "$VAULT_ROOT" rev-parse --short HEAD))"
 
+# ── 4b. 사내 경계 가드레일 (§4.3 능동 차단) ──────────────────────────
+# 공용 obsidian-para(GitHub)는 80-Company/ 를 .gitignore 로 제외해야 한다. 만약 그 경로가
+# 공용 repo 에 '추적(tracked)'되고 있으면 다음 push 때 사내 콘텐츠가 공개 GitHub 로 새어나간다.
+# 구조적 방어(.gitignore)에만 의존하지 않고, push 정책을 적용하기 전에 능동적으로 거부한다.
+COMPANY_DIR="${COMPANY_DIR:-80-Company}"
+tracked_company="$(git -C "$VAULT_ROOT" ls-files -- "$COMPANY_DIR" 2>/dev/null || true)"
+if [ -n "$tracked_company" ]; then
+  warn "공용 repo 에 사내 경로($COMPANY_DIR)가 추적되고 있습니다 — 사내 콘텐츠 유출 위험:"
+  printf '%s\n' "$tracked_company" | sed 's/^/      /' >&2
+  die "사내 경계 위반(§4.3). 공용 obsidian-para 의 .gitignore 에 '$COMPANY_DIR/' 를 추가하고
+       'git -C \"$VAULT_ROOT\" rm -r --cached $COMPANY_DIR' 로 추적을 해제한 뒤 다시 실행하세요."
+fi
+ok "사내 경계 OK ($COMPANY_DIR 는 공용 repo 에 미추적)"
+
 # ── 5. 모드별 push 정책 ──────────────────────────────────────────────
 if [ "$MODE" = "internal" ]; then
   git -C "$VAULT_ROOT" remote set-url --push origin "$NO_PUSH_SENTINEL"

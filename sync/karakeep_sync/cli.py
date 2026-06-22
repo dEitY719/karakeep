@@ -59,13 +59,30 @@ def _bookmark_needs_push(
     return True
 
 
-def _repo_accepts_bookmark(repo: RepoConfig, bm_lists: list[str]) -> bool:
-    """리스트 라우팅(include/exclude)상 이 repo 가 이 북마크를 받는지 판단한다.
+def _is_confidential(bm_lists: list[str], company_lists: list[str]) -> bool:
+    """이 북마크가 사내(80-Company) 전용 리스트에 속하는지 (§4.3 confidential 판정)."""
+    return bool(company_lists) and bookmark_in_any_list(bm_lists, company_lists)
+
+
+def _repo_accepts_bookmark(
+    repo: RepoConfig, bm_lists: list[str], company_lists: list[str] | None = None
+) -> bool:
+    """리스트 라우팅(include/exclude) + §4.3 사내 가드레일상 이 repo 가 이 북마크를 받는지.
 
     push 와 status 가 공유하는 단일 판정 — 과거 status 는 이 필터를 적용하지 않아,
     어느 push repo 로도 라우팅되지 않는 북마크(예: external PC 의 Company 북마크)를
     영원히 'Pending push' 로 잘못 셌다.
+
+    가드레일(능동 차단): per-repo exclude_lists 설정과 무관한 다층 방어다.
+      - confidential 북마크는 is_company repo 로만 → 공용 repo 로 유출 차단(설정 누락 대비).
+      - is_company repo 에는 confidential 북마크만 → 공용 북마크가 사내 깃에 섞이지 않게.
     """
+    company_lists = company_lists or []
+    confidential = _is_confidential(bm_lists, company_lists)
+    if confidential and not repo.is_company:
+        return False
+    if repo.is_company and company_lists and not confidential:
+        return False
     if repo.include_lists and not bookmark_in_any_list(bm_lists, repo.include_lists):
         return False
     if bookmark_in_any_list(bm_lists, repo.exclude_lists):
@@ -127,6 +144,12 @@ def push(force: bool) -> None:
     # 북마크 id → 소속 리스트 full path. frontmatter 의 lists 필드로 단방향 반영한다.
     list_paths = client.get_bookmark_list_paths()
 
+    # 이 PC 에 confidential 북마크를 받을 사내 repo(is_company)가 push 가능하게 있는가.
+    has_company_target = any(
+        r.push and r.is_company for r in config.repos.values()
+    )
+    routed_company_ids: set[str] = set()
+
     for repo_name, repo in config.repos.items():
         if not repo.push:
             continue
@@ -137,20 +160,36 @@ def push(force: bool) -> None:
                 continue
 
             bm.lists = list_paths.get(bm.id, [])
-            # repo 별 리스트 라우팅 (include_lists / exclude_lists). status 와 동일 판정.
-            if not _repo_accepts_bookmark(repo, bm.lists):
+            # repo 별 리스트 라우팅 + §4.3 사내 가드레일. status 와 동일 판정.
+            if not _repo_accepts_bookmark(repo, bm.lists, config.company_lists):
                 continue
             md_path = repo.path / bookmark_filename(bm)
             md_path.parent.mkdir(parents=True, exist_ok=True)
             md_path.write_text(bookmark_to_md(bm))
             changed.append(md_path)
             state[bm.id] = BookmarkState(updated=bm.updated, repo=repo_name, imported=False)
+            if repo.is_company:
+                routed_company_ids.add(bm.id)
 
         if changed:
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             commit_and_push(repo.path, changed, f"sync: push {len(changed)} bookmarks [{now}]")
 
     save_state(state)
+
+    # 능동 경고(§4.3): 사내 repo 가 없는 PC 에서 confidential 북마크가 발견되면, 공용
+    # repo 로 새지 않게 보류했음을 명시한다 (조용한 차단 → 사용자가 인지 가능한 차단).
+    if not has_company_target:
+        withheld = sum(
+            1 for bm in bookmarks
+            if _is_confidential(list_paths.get(bm.id, []), config.company_lists)
+        )
+        if withheld:
+            click.echo(
+                f"⚠️  사내(80-Company) 북마크 {withheld}건은 이 PC 에 사내 repo 가 없어 "
+                f"공용 동기화에서 보류했습니다 (§4.3 가드레일)."
+            )
+
     click.echo("Push complete.")
 
 
@@ -217,7 +256,7 @@ def status() -> None:
         if not _bookmark_needs_push(bm, state.get(bm.id)):
             continue
         bm_lists = list_paths.get(bm.id, [])
-        if any(_repo_accepts_bookmark(repo, bm_lists) for repo in push_repos):
+        if any(_repo_accepts_bookmark(repo, bm_lists, config.company_lists) for repo in push_repos):
             pending += 1
     click.echo(f"Pending push: {pending} bookmark(s)")
 
