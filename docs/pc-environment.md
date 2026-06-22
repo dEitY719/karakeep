@@ -55,8 +55,9 @@ ObsidianVault-PARA/
       <id>.md ...         #   평면 저장
     Bookmarks Dashboard.md  # Dataview 대시보드 (Bookmarks 폴더 밖 = git 제외)
   40-Archive/
-  80-Company/             # 사내 전용 (internal 모드에서만)
-    Bookmarks/            # bookmarks-company 클론
+  80-Company/             # 사내 전용 (internal 모드에서만, GHES)
+    Bookmarks/            # 사내 북마크 = bookmarks-company 클론 (GHES)
+    docs/                 # 사내 문서/노트 (사내 vault repo, GHES)
   99-Inbox/               # 미분류 임시 보관 → 분류 후 이동
 ```
 
@@ -74,6 +75,39 @@ repos:
 - 공용 북마크 → `30-Resource/Bookmarks/` (Resource = reference 자료)
 - 사내 북마크 → `80-Company/Bookmarks/` (명확한 분리)
 - 대시보드 노트는 `30-Resource/Bookmarks Dashboard.md` (Bookmarks 폴더 밖이라 git push 제외)
+
+### 4.2 사용 시나리오 (Usage Examples)
+
+"파일을 어디에 두면 어디로 동기화되는가"의 규칙. (공용 노트 동기화 메커니즘은 §6 참조)
+
+| # | 동작 | 저장 위치 | 동기화 범위 | 메커니즘 |
+|---|------|-----------|-------------|----------|
+| 1 | Home 에서 `20-Area/finance/xxx.md` 생성 | `20-Area/finance/` | Internal · External 로 전파 | 공용 노트 동기화(§6) |
+| 2 | External 에서 `20-Area/health/xxx.md` 생성 | `20-Area/health/` | Internal · Home 로 전파 | 공용 노트 동기화(§6) |
+| 3 | External 에서 karakeep 으로 URL 등록 | `30-Resource/Bookmarks/<id>.md` | 5 PC 전부 (Internal·Home 포함) | karakeep-sync + `bookmarks-common`(§3) — **동작 확인됨** |
+| 4 | Internal 에서 북마크 저장 | `80-Company/Bookmarks/<id>.md` | **Internal PC 끼리만** | karakeep-sync + `bookmarks-company`(GHES) |
+| 5 | Internal 에서 사내 문서 작성 | `80-Company/docs/…` | **Internal PC 끼리만** | 사내 vault repo(GHES) |
+| 6 | Internal 에서 사내 문서를 `80-Company/` **밖**에 저장 | (금지) | — | **에러 — §4.3 가드레일** |
+
+핵심:
+
+- **공용(common)** 노트·북마크는 5 PC 전부 공유. 단 **internal 은 GitHub push 불가**
+  (pull-only)이므로, 공용 콘텐츠의 *생성·수정은 external·home 에서* 하고 internal 은 받기만 한다.
+  (그래서 예시 1·2 의 생성 주체가 Home·External 이다.)
+- **사내(company)** 콘텐츠는 `80-Company/` 안에서만 만들고, internal PC 끼리 **GHES** 로만 공유한다.
+  external·home 에는 절대 내려가지 않는다.
+
+### 4.3 사내 콘텐츠 가드레일 (`80-Company/` 경계)
+
+- 사내 전용 문서·북마크는 **반드시 `80-Company/` 하위**에만 저장한다.
+- `80-Company/` 밖(예: `20-Area/`, `30-Resource/`)에 사내 콘텐츠를 저장하는 것은
+  **규칙 위반(에러)**이다 — 공용 repo(GitHub)로 새어나갈 수 있기 때문.
+- 경계가 지켜지는 이유(다층 방어):
+  1. `80-Company/` 는 공용 `obsidian-para`(GitHub)에서 `.gitignore` 로 제외 → 공용 push 에 안 실림.
+  2. internal 은 GitHub push 자체가 불가(pull-only) → 공용 영역에 잘못 둔 사내 글도 밖으로 못 나감.
+  3. 전체-vault 동기화(§6)의 공용 공유는 `80-Company/` 를 통째 제외.
+- (TODO) **능동적 차단**: 사내 문서가 `80-Company/` 밖에 생기면 경고/거부하는 pre-sync 훅
+  또는 karakeep-sync 라우팅 검사 추가. 현재는 위 수동 규칙 + 구조적 방어에 의존.
 
 ## 5. 신규 PC 부트스트랩 (목표: 1-스크립트)
 
@@ -96,8 +130,8 @@ repos:
 ### 경계(스코프)
 
 - 부트스트랩은 **북마크 파이프라인 + vault 골격**만 만든다.
-- vault 의 실제 **노트 본문** 동기화(전 PC 공유)는 별도 메커니즘 → **§6** 참조.
-  북마크 폴더 안의 `.git` 과 충돌하지 않도록 전체-vault 동기화에서 북마크 폴더는 제외한다.
+- vault 의 실제 **노트 본문** 동기화(전 PC 공유)는 git(`obsidian-para`) → **§6** ·
+  `scripts/vault-sync.sh`. 북마크 폴더는 submodule/별도 repo 로 분리해 중첩 `.git` 충돌을 피한다.
 
 ## 6. 전체 vault 노트 동기화 (북마크 폴더 제외)
 
@@ -105,60 +139,50 @@ repos:
 PC 간 공유되지만, 그 외 일반 노트(`10-Project`/`20-Area`/`30-Resource` 등)는
 공유 메커니즘이 없었다. 5-PC 가 동일 정보를 공유하려면 전체 vault 동기화가 필요하다.
 
-### 6.1 선정: Syncthing (P2P, 무료, 클라우드 불필요)
+### 6.1 선정: git (`obsidian-para`) — Syncthing 폐기
+
+노트 동기화는 **git(`obsidian-para`)** 으로 한다. (이전 Syncthing 안은 폐기 — 운영 결정)
 
 | 옵션 | 채택 | 이유 |
 |------|------|------|
-| **Syncthing** | ✅ | 무료·P2P, 외부 클라우드 불필요(사내 데이터가 device↔device 메시 밖으로 안 나감), `.stignore` 로 폴더 제외, 디바이스별 공유 분리로 거버넌스 경계 강제 가능 |
-| Obsidian Sync | △ | 쉽지만 유료, 외부 클라우드 경유 → `internal` 접속 제한·사내 노트 거버넌스 위험 |
-| Git(전체 vault) | ✗ | 북마크 폴더의 중첩 `.git` → 서브모듈화 복잡, `internal` 은 GitHub push 불가(GHES 필요) |
+| **git (`obsidian-para`)** | ✅ | 이미 GitHub/GHES·karakeep PAT 인프라 재사용, 버전관리·이력, **별도 remote(GitHub vs GHES)로 scope 분리 강제**, `scripts/vault-sync.sh` 로 모드별 자동화 |
+| Syncthing | ✗ | 별도 데몬·디바이스 페어링(머신별 비밀) 필요, 버전 이력 없음, git 인프라 중복 |
+| Obsidian Sync | ✗ | 유료·외부 클라우드 경유 → `internal` 거버넌스 위험 |
 | OneDrive/Dropbox | ✗ | `.git` churn·충돌 위험, 사내 노트 외부 유출 |
 
-> 핵심 제약: 북마크 폴더(`30-Resource/Bookmarks`, `80-Company/Bookmarks`)는
-> karakeep-sync 가 30분마다 commit/pull 하는 `.git` repo 다. 전체-vault 동기화가
-> 이들을 함께 옮기면 **중첩 `.git` 충돌 + 지속 churn** 이 난다 → 반드시 제외한다.
+> 트레이드오프: git 은 **internal 이 공용(GitHub)에 push 불가(pull-only)**. 따라서 공용
+> 노트의 *생성·수정은 external·home 에서* 하고 internal 은 받기만 한다(§4.2). internal 의
+> 쓰기는 사내 영역(`80-Company/`, GHES)에만 허용된다.
 
-### 6.2 두 개의 Syncthing 공유 (거버넌스 경계)
+### 6.2 두 repo 로 scope 분리
 
-사내 노트(`80-Company`)가 외부로 새지 않도록 **공유를 둘로 분리**한다:
+| 도메인 | repo | vault 내 위치 | internal | external/home |
+|--------|------|---------------|----------|---------------|
+| 공용 노트 | `obsidian-para` (GitHub) | vault 최상위 | **pull-only** | push/pull |
+| 사내 노트 | `obsidian-para` (GHES) | `80-Company/` | push/pull | 접속 불가 |
 
-| 공유 | 루트 | 연결 대상 | `.stignore` 템플릿 | 제외 항목 |
-|------|------|-----------|--------------------|-----------|
-| **vault-notes** | vault 최상위 | **5-PC 전부** | `sync/stignore/vault-notes.stignore` | `30-Resource/Bookmarks`(공용 북마크 git), **`80-Company` 통째**, `.obsidian/workspace*`·cache |
-| **vault-company** | `80-Company` | **internal PC 끼리만** | `sync/stignore/vault-company.stignore` | `Bookmarks`(사내 북마크 GHES git) |
+- 공용: vault 최상위 자체가 GitHub `obsidian-para`. `80-Company/` 는 여기서 `.gitignore` 로 제외 → 공용 repo 로 사내 콘텐츠가 안 새어나감(§4.3).
+- 사내: `80-Company/` 가 GHES `obsidian-para` 클론. **internal PC 끼리만** push/pull, external·home 엔 존재하지 않음.
+- 자동화: `scripts/vault-sync.sh` 가 `~/.dotfiles-setup-mode` 를 읽어 clone/pull + internal push 차단을 적용한다 (상세 [scripts/README.md](../scripts/README.md)).
 
-- `vault-notes` 가 `80-Company` 를 통째로 제외하므로, 사내 노트는 전-PC 공유에
-  **절대 올라가지 않는다**. external/home PC 에는 `vault-company` 공유를 **추가하지 않는다**
-  → 사내 노트가 사내망 밖으로 나가지 않음을 물리적으로 보장.
-- `80-Company` 는 `vault-notes` 안에 중첩되지만 위 제외 규칙으로 두 공유는 충돌하지 않는다
-  (Syncthing 중첩 폴더는 외부 공유에서 ignore 되어 있으면 허용된다).
+### 6.3 중첩 git(북마크 폴더) 처리
 
-모드별 정리:
+북마크 폴더는 karakeep-sync 가 30분마다 commit/pull 하는 **별도 `.git`** 이라, 노트 repo
+안에서 중첩 repo 충돌을 피해야 한다:
 
-| 모드 | vault-notes | vault-company |
-|------|-------------|---------------|
-| `internal` | 참여 | **참여 (internal 끼리만)** |
-| `external` | 참여 | **불참 (사내 노트 수신 금지)** |
-| `home` | 참여 | **불참** |
+- `30-Resource/Bookmarks` (= `bookmarks-common`) → GitHub `obsidian-para` 의 **submodule**.
+  cron 이 HEAD 를 올려도 internal 은 pull-only 라 gitlink churn 이 무해하다. external/home 은
+  필요 시에만 gitlink 를 갱신(또는 무시).
+- `80-Company/Bookmarks` (= `bookmarks-company`, GHES) → GHES `obsidian-para` 안에서
+  submodule 또는 gitignore + 별도 클론으로 둔다.
 
-### 6.3 부트스트랩 연동
+### 6.4 검증 절차
 
-`scripts/bootstrap.sh` 가 vault 골격 생성 단계에서 위 `.stignore` 템플릿을 배치한다:
+1. external 에서 `20-Area/health/x.md` 생성 → push → internal·home 에서 pull → 보임.
+2. internal 에서 공용 노트 push 시도 → **차단(pull-only)** 확인.
+3. internal 에서 `80-Company/docs/y.md` 생성 → GHES push → 다른 internal PC 에서 pull → 보임.
+   동시에 external·home 에는 **나타나지 않음** 확인.
+4. 북마크 무충돌: 30분 cron 1회 후 `30-Resource/Bookmarks` 의 `git status` 가 깨끗한지 확인.
 
-- 전 모드: `sync/stignore/vault-notes.stignore` → `<vault>/.stignore`
-- `internal` 모드만: `sync/stignore/vault-company.stignore` → `<vault>/80-Company/.stignore`
-
-기존 `.stignore` 는 덮어쓰지 않는다(멱등). Syncthing **설치·디바이스 페어링·폴더
-공유 추가**는 디바이스 ID 가 머신별 비밀이므로 스크립트가 자동화하지 않고
-수동 단계로 안내한다(이 repo 는 토폴로지만 담는다 — 상단 주의 참고).
-
-### 6.4 검증 절차 (최소 2-PC)
-
-1. 두 PC 에 Syncthing 설치 → 서로 디바이스 추가.
-2. 양쪽 `vault-notes` 공유 연결(루트=vault). `.stignore` 가 배치됐는지 확인.
-3. 한 PC 에서 `10-Project` 에 노트 생성 → 다른 PC 로 전파 확인.
-4. 북마크 무충돌 확인: 30분 cron 1회 경과 후 `30-Resource/Bookmarks` 의
-   `git status` 가 깨끗하고, Syncthing 이 그 폴더를 건드리지 않았는지 확인
-   (`.stignore` 매칭 → Out of Sync 항목 없음).
-5. (internal 2대 한정) `vault-company` 공유 연결 → `80-Company` 노트 전파 확인,
-   동시에 external/home PC 에는 사내 노트가 **나타나지 않음** 확인.
+> 정리 필요(별도 PR): Syncthing 폐기로 `sync/stignore/*.stignore` 템플릿과 §5 부트스트랩의
+> `.stignore` 배치 단계는 더 이상 쓰이지 않는다(제거 대상).
