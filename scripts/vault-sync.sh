@@ -196,10 +196,24 @@ else
 fi
 
 # ── 6. Bookmarks 서브모듈 (토큰은 로컬 .git/config 에만, .gitmodules 는 clean) ──
+# 체크아웃 정책은 모드별로 다르다(#37, §6.3):
+#   internal : pull-only 라 gitlink 추종(플레인 update)이 무해 + 재현 가능 → 기존 동작.
+#   external/home : karakeep-sync cron 이 같은 폴더(=bookmarks-common)에 30분마다
+#     commit/push 하므로, 플레인 `submodule update`(gitlink 체크아웃)는 워킹트리를
+#     superproject 에 박힌 옛 커밋으로 되돌려 churn/race 를 일으킨다. 따라서 이미
+#     클론돼 있으면 워킹트리는 karakeep-sync 소유로 보고 체크아웃을 생략하고,
+#     최초 1회만 --init 으로 populate 한다(이후 동기화는 cron 담당).
 git -C "$VAULT_ROOT" submodule init "$SUBMODULE_PATH" 2>/dev/null || true
 git -C "$VAULT_ROOT" config "submodule.${SUBMODULE_PATH}.url" "$SUB_URL"
-git_retry -C "$VAULT_ROOT" submodule update "$SUBMODULE_PATH" \
-  || warn "submodule update 실패 (karakeep-sync 가 별도 관리 중이면 무시 가능)"
+if [ "$MODE" = "internal" ]; then
+  git_retry -C "$VAULT_ROOT" submodule update "$SUBMODULE_PATH" \
+    || warn "submodule update 실패 (karakeep-sync 가 별도 관리 중이면 무시 가능)"
+elif [ -e "$VAULT_ROOT/$SUBMODULE_PATH/.git" ]; then
+  ok "$MODE → Bookmarks 워킹트리는 karakeep-sync 소유 → submodule update 생략 (#37 gitlink churn 방지)"
+else
+  git_retry -C "$VAULT_ROOT" submodule update --init "$SUBMODULE_PATH" \
+    || warn "submodule 최초 populate 실패 (karakeep-sync 가 별도 관리 중이면 무시 가능)"
+fi
 if [ -d "$VAULT_ROOT/$SUBMODULE_PATH/.git" ] || [ -f "$VAULT_ROOT/$SUBMODULE_PATH/.git" ]; then
   if [ "$MODE" = "internal" ]; then
     git -C "$VAULT_ROOT/$SUBMODULE_PATH" remote set-url --push origin "$NO_PUSH_SENTINEL" 2>/dev/null || true
