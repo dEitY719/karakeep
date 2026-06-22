@@ -86,6 +86,10 @@ cron은 `init` 시 자동 등록됨 (30분마다 `auto` 실행). cron 라인은
 - `internal` → 회사 모드: Company(GHES) push/pull + Common(GitHub) pull only
 - 그 외 → 집 모드: Common(GitHub) push/pull
 
+vault 전체(노트 + `.obsidian` + Bookmarks)를 PC 간 git 동기화하려면
+`scripts/vault-sync.sh` 를 사용한다 (모드 인지 · 경로 자동탐지 · internal=pull-only).
+상세 가이드는 [scripts/README.md](scripts/README.md) 참고.
+
 ## 태그 체계 (권장)
 
     area/work        area/personal
