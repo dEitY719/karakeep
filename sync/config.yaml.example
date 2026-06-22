@@ -25,7 +25,11 @@ repos:
   # 사내 북마크 (GHES) — internal 모드에서만 활성 (config.py 가 그 외 모드에선 skip).
   company:
     path: 80-Company/Bookmarks
-    remote: https://${GHES_PAT}@${GHES_HOST}/dEitY719/bookmarks-company.git
+    # SSOT(#38): owner 도 ${GHES_OWNER} 로 — vault-sync.sh §8 이 조립하는 URL 과 '동일
+    # 컴포넌트'(GHES_PAT/GHES_HOST/GHES_OWNER)에서 나오게 한다. 여기에 리터럴 owner 를
+    # 박으면 GHES_OWNER≠그 리터럴일 때 karakeep-sync 와 vault-sync.sh 가 매 실행
+    # git remote set-url 로 번갈아 덮어써 remote churn/간헐 실패가 생긴다.
+    remote: https://${GHES_PAT}@${GHES_HOST}/${GHES_OWNER}/bookmarks-company.git
     pull: true
     # 사내 전용 repo 표식 — company_lists 북마크의 유일한 합법 목적지(§4.3).
     # repo 이름이 'company' 면 자동 True 이지만 명시해 둔다.
