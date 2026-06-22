@@ -83,8 +83,10 @@ if [ ! -f "$SECRETS" ]; then
 OBSIDIAN_PARA_PAT=""      # obsidian-para repo 용 PAT (internal=Read 면 충분, external/home=Read/Write)
 BOOKMARKS_COMMON_PAT=""   # bookmarks-common (submodule) 용 PAT
 
-# ── internal 모드에서만 필요 ───────────────────────────────────────
-# 회사 GHES bookmarks-company remote (토큰 포함 전체 URL 권장; 사내 비밀이므로 여기에만)
+# ── internal 모드에서만 필요 (internal 은 필수 — 없으면 실행 거부) ──
+# 사내 문서/노트(80-Company/)용 GHES obsidian-para remote (토큰 포함 전체 URL; 사내 비밀이므로 여기에만)
+OBSIDIAN_PARA_COMPANY_REMOTE=""  # 예: https://<user>:<ghes-pat>@<ghes-host>/<org>/obsidian-para.git
+# 사내 북마크(80-Company/Bookmarks/)용 GHES bookmarks-company remote (토큰 포함 전체 URL)
 BOOKMARKS_COMPANY_REMOTE=""   # 예: https://<user>:<ghes-pat>@<ghes-host>/<org>/bookmarks-company.git
 CORP_CA=""                    # 사내 루트 CA pem 경로 (TLS 재서명 환경; 없으면 비움)
 TPL
@@ -98,6 +100,14 @@ set -a
 set +a
 [ -n "${OBSIDIAN_PARA_PAT:-}" ]    || die "$SECRETS 에 OBSIDIAN_PARA_PAT 미설정"
 [ -n "${BOOKMARKS_COMMON_PAT:-}" ] || die "$SECRETS 에 BOOKMARKS_COMMON_PAT 미설정"
+# internal 은 사내 영역(80-Company/) 쓰기가 핵심 — GHES remote 없으면 사내 문서·북마크
+# 동기화 실패이므로 거부.
+if [ "$MODE" = "internal" ]; then
+  [ -n "${OBSIDIAN_PARA_COMPANY_REMOTE:-}" ] \
+    || die "$SECRETS 에 OBSIDIAN_PARA_COMPANY_REMOTE 미설정 (internal 은 80-Company 사내 문서 동기화에 필수)"
+  [ -n "${BOOKMARKS_COMPANY_REMOTE:-}" ] \
+    || die "$SECRETS 에 BOOKMARKS_COMPANY_REMOTE 미설정 (internal 은 80-Company 북마크 등록에 필수)"
+fi
 
 # ── 2. Windows vault 경로 탐지 ───────────────────────────────────────
 if [ -z "${VAULT_ROOT:-}" ]; then
@@ -181,21 +191,45 @@ if [ -d "$VAULT_ROOT/$SUBMODULE_PATH/.git" ] || [ -f "$VAULT_ROOT/$SUBMODULE_PAT
   fi
 fi
 
-# ── 7. internal 전용: 80-Company/Bookmarks (GHES, read/write) ────────
+# ── 7. internal 전용: 80-Company/ (GHES obsidian-para, 사내 문서 read/write) ──
+# 사내 문서/노트(80-Company/docs 등)는 공용 GitHub 가 아니라 GHES obsidian-para 로만 공유한다
+# (§6.2). 80-Company/ 자체가 GHES obsidian-para 클론이고, 그 안의 Bookmarks/ 는 GHES repo 의
+# .gitignore + 별도 클론(아래 8단계)으로 둔다(§6.3). internal PC 끼리만 push/pull.
+# OBSIDIAN_PARA_COMPANY_REMOTE 는 위(시크릿 검사)에서 internal 일 때 필수로 강제됨.
 if [ "$MODE" = "internal" ]; then
-  if [ -z "${BOOKMARKS_COMPANY_REMOTE:-}" ]; then
-    warn "BOOKMARKS_COMPANY_REMOTE 미설정 → 80-Company 북마크 건너뜀 ($SECRETS 에 추가하세요)"
+  CO_DIR="$VAULT_ROOT/$COMPANY_DIR"
+  if [ -d "$CO_DIR/.git" ]; then
+    git -C "$CO_DIR" remote set-url origin "$OBSIDIAN_PARA_COMPANY_REMOTE"
+    git_retry -C "$CO_DIR" pull --ff-only || warn "사내 문서(80-Company) pull 실패"
+  elif [ -d "$CO_DIR" ] && [ -n "$(ls -A "$CO_DIR" 2>/dev/null)" ]; then
+    # 디렉터리에 로컬 파일이 이미 있음 → clone 불가, init 후 GHES 연결(기존 파일 보존)
+    git -C "$CO_DIR" init -q
+    git -C "$CO_DIR" remote add origin "$OBSIDIAN_PARA_COMPANY_REMOTE" 2>/dev/null \
+      || git -C "$CO_DIR" remote set-url origin "$OBSIDIAN_PARA_COMPANY_REMOTE"
+    git_retry -C "$CO_DIR" fetch origin || warn "사내 문서(80-Company) fetch 실패"
+    git -C "$CO_DIR" checkout main 2>/dev/null \
+      || git -C "$CO_DIR" checkout -b main --track origin/main 2>/dev/null \
+      || warn "사내 문서(80-Company) main 체크아웃 실패 — 로컬 파일과 충돌 시 수동 정리 필요"
   else
-    CDIR="$VAULT_ROOT/$COMPANY_BM_PATH"
-    if [ -d "$CDIR/.git" ]; then
-      git -C "$CDIR" remote set-url origin "$BOOKMARKS_COMPANY_REMOTE"
-      git_retry -C "$CDIR" pull --ff-only || warn "company 북마크 pull 실패"
-    else
-      mkdir -p "$(dirname "$CDIR")"
-      git_retry clone "$BOOKMARKS_COMPANY_REMOTE" "$CDIR" || warn "company 북마크 clone 실패"
-    fi
-    ok "80-Company/Bookmarks (GHES) read/write 준비됨"
+    mkdir -p "$CO_DIR"
+    git_retry clone "$OBSIDIAN_PARA_COMPANY_REMOTE" "$CO_DIR" || warn "사내 문서(80-Company) clone 실패"
+    git -C "$CO_DIR" checkout main 2>/dev/null || true
   fi
+  ok "80-Company/ (GHES obsidian-para) 사내 문서 read/write 준비됨"
+fi
+
+# ── 8. internal 전용: 80-Company/Bookmarks (GHES bookmarks-company, read/write) ──
+# BOOKMARKS_COMPANY_REMOTE 는 위(시크릿 검사)에서 internal 일 때 필수로 강제됨.
+if [ "$MODE" = "internal" ]; then
+  CDIR="$VAULT_ROOT/$COMPANY_BM_PATH"
+  if [ -d "$CDIR/.git" ]; then
+    git -C "$CDIR" remote set-url origin "$BOOKMARKS_COMPANY_REMOTE"
+    git_retry -C "$CDIR" pull --ff-only || warn "company 북마크 pull 실패"
+  else
+    mkdir -p "$(dirname "$CDIR")"
+    git_retry clone "$BOOKMARKS_COMPANY_REMOTE" "$CDIR" || warn "company 북마크 clone 실패"
+  fi
+  ok "80-Company/Bookmarks (GHES) read/write 준비됨"
 fi
 
 printf '\n'
