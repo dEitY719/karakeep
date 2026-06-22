@@ -33,6 +33,7 @@ set -euo pipefail
 GH_OWNER="${GH_OWNER:-dEitY719}"
 PARA_REPO="${PARA_REPO:-obsidian-para}"
 COMMON_REPO="${COMMON_REPO:-bookmarks-common}"
+COMPANY_REPO="${COMPANY_REPO:-bookmarks-company}"
 SUBMODULE_PATH="${SUBMODULE_PATH:-30-Resource/Bookmarks}"
 COMPANY_BM_PATH="${COMPANY_BM_PATH:-80-Company/Bookmarks}"
 MODE_FILE="${MODE_FILE:-$HOME/.dotfiles-setup-mode}"
@@ -53,7 +54,7 @@ log()  { printf '  %s\n' "$*"; }
 ok()   { printf '  ✅ %s\n' "$*"; }
 warn() { printf '  ⚠️  %s\n' "$*" >&2; }
 die()  { printf '  ❌ %s\n' "$*" >&2; exit 1; }
-redact() { sed -E 's#(://[^:@/]+:)[^@/]+@#\1***@#g; s/(gh[oprs]_|github_pat_)[A-Za-z0-9_]+/\1***/g'; }
+redact() { sed -E 's#(://[^:@/]+:)[^@/]+@#\1***@#g; s#(://)[^:@/]+@#\1***@#g; s/(gh[oprs]_|github_pat_)[A-Za-z0-9_]+/\1***/g'; }
 
 # 연결 리셋(사내 방화벽) 대비 재시도 래퍼
 git_retry() {
@@ -78,17 +79,23 @@ if [ ! -f "$SECRETS" ]; then
   mkdir -p "$(dirname "$SECRETS")"; chmod 700 "$(dirname "$SECRETS")"
   cat > "$SECRETS" <<'TPL'
 # obsidian-para 동기화 시크릿 (이 파일은 git 에 절대 올리지 마세요)
-# GitHub 토큰은 각 repo 전용 fine-grained PAT (Contents: Read 또는 Read/Write) 권장.
 
-OBSIDIAN_PARA_PAT=""      # obsidian-para repo 용 PAT (internal=Read 면 충분, external/home=Read/Write)
-BOOKMARKS_COMMON_PAT=""   # bookmarks-common (submodule) 용 PAT
+# GitHub(공용) — PAT 한 개로 obsidian-para + bookmarks-common 둘 다 접근.
+# fine-grained 면 두 repo 를 모두 선택(Contents: internal=Read, external/home=Read/Write).
+GITHUB_PAT=""
 
-# ── internal 모드에서만 필요 (internal 은 필수 — 없으면 실행 거부) ──
-# 사내 문서/노트(80-Company/)용 GHES obsidian-para remote (토큰 포함 전체 URL; 사내 비밀이므로 여기에만)
-OBSIDIAN_PARA_COMPANY_REMOTE=""  # 예: https://<user>:<ghes-pat>@<ghes-host>/<org>/obsidian-para.git
-# 사내 북마크(80-Company/Bookmarks/)용 GHES bookmarks-company remote (토큰 포함 전체 URL)
-BOOKMARKS_COMPANY_REMOTE=""   # 예: https://<user>:<ghes-pat>@<ghes-host>/<org>/bookmarks-company.git
-CORP_CA=""                    # 사내 루트 CA pem 경로 (TLS 재서명 환경; 없으면 비움)
+# ── internal 모드에서만 필요 (셋 다 — 없으면 실행 거부) ──
+# 사내 GHES 자격증명 — PAT 한 개로 obsidian-para(사내 문서) + bookmarks-company(사내 북마크) 둘 다.
+# 스크립트가 아래 3개로 두 GHES remote URL 을 자동 조립한다 (karakeep-sync .env 의 GHES_* 와 동일 값).
+GHES_PAT=""      # GHES PAT (Contents: Read/Write)
+GHES_HOST=""     # 예: ghes.example.com
+GHES_OWNER=""    # 예: my-org (또는 사용자)
+CORP_CA=""       # 사내 루트 CA pem 경로 (TLS 재서명 환경; 없으면 비움)
+
+# (선택) 위 컴포넌트 대신 토큰 포함 전체 URL 을 직접 지정하려면 아래를 채운다(있으면 우선):
+#   OBSIDIAN_PARA_COMPANY_REMOTE="https://<pat>@<host>/<owner>/obsidian-para.git"
+#   BOOKMARKS_COMPANY_REMOTE="https://<pat>@<host>/<owner>/bookmarks-company.git"
+# (구 변수 OBSIDIAN_PARA_PAT / BOOKMARKS_COMMON_PAT 도 계속 지원됨)
 TPL
   chmod 600 "$SECRETS"
   die "시크릿 템플릿을 생성했습니다 → $SECRETS
@@ -98,15 +105,24 @@ set -a
 # shellcheck disable=SC1090
 . "$SECRETS"
 set +a
-[ -n "${OBSIDIAN_PARA_PAT:-}" ]    || die "$SECRETS 에 OBSIDIAN_PARA_PAT 미설정"
-[ -n "${BOOKMARKS_COMMON_PAT:-}" ] || die "$SECRETS 에 BOOKMARKS_COMMON_PAT 미설정"
-# internal 은 사내 영역(80-Company/) 쓰기가 핵심 — GHES remote 없으면 사내 문서·북마크
-# 동기화 실패이므로 거부.
+# GitHub PAT: 단일 GITHUB_PAT 로 두 repo 공용. 구 per-repo 변수(OBSIDIAN_PARA_PAT/
+# BOOKMARKS_COMMON_PAT)가 있으면 그걸 우선 쓰고, 없으면 GITHUB_PAT 로 채운다(하위호환).
+: "${OBSIDIAN_PARA_PAT:=${GITHUB_PAT:-}}"
+: "${BOOKMARKS_COMMON_PAT:=${GITHUB_PAT:-${OBSIDIAN_PARA_PAT:-}}}"
+[ -n "${OBSIDIAN_PARA_PAT:-}" ]    || die "$SECRETS 에 GITHUB_PAT (또는 OBSIDIAN_PARA_PAT) 미설정"
+[ -n "${BOOKMARKS_COMMON_PAT:-}" ] || die "$SECRETS 에 GITHUB_PAT (또는 BOOKMARKS_COMMON_PAT) 미설정"
+
+# internal 은 사내 영역(80-Company/) 쓰기가 핵심. GHES remote 를 컴포넌트(GHES_PAT/HOST/
+# OWNER)로 조립한다. 구 full-URL 변수가 직접 설정돼 있으면 그걸 우선(하위호환). 둘 다 없으면 거부.
 if [ "$MODE" = "internal" ]; then
+  if [ -n "${GHES_PAT:-}" ] && [ -n "${GHES_HOST:-}" ] && [ -n "${GHES_OWNER:-}" ]; then
+    : "${OBSIDIAN_PARA_COMPANY_REMOTE:=https://${GHES_PAT}@${GHES_HOST}/${GHES_OWNER}/${PARA_REPO}.git}"
+    : "${BOOKMARKS_COMPANY_REMOTE:=https://${GHES_PAT}@${GHES_HOST}/${GHES_OWNER}/${COMPANY_REPO}.git}"
+  fi
   [ -n "${OBSIDIAN_PARA_COMPANY_REMOTE:-}" ] \
-    || die "$SECRETS 에 OBSIDIAN_PARA_COMPANY_REMOTE 미설정 (internal 은 80-Company 사내 문서 동기화에 필수)"
+    || die "$SECRETS 에 GHES_PAT/GHES_HOST/GHES_OWNER (또는 OBSIDIAN_PARA_COMPANY_REMOTE) 미설정 (internal 사내 문서 동기화 필수)"
   [ -n "${BOOKMARKS_COMPANY_REMOTE:-}" ] \
-    || die "$SECRETS 에 BOOKMARKS_COMPANY_REMOTE 미설정 (internal 은 80-Company 북마크 등록에 필수)"
+    || die "$SECRETS 에 GHES_PAT/GHES_HOST/GHES_OWNER (또는 BOOKMARKS_COMPANY_REMOTE) 미설정 (internal 사내 북마크 등록 필수)"
 fi
 
 # ── 2. Windows vault 경로 탐지 ───────────────────────────────────────
