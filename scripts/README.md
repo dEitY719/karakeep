@@ -49,8 +49,10 @@ PC 간 동기화한다.
 
 - WSL + Windows, `git`.
 - private repo: `github.com/dEitY719/obsidian-para`, 서브모듈 `bookmarks-common`.
-- repo별 **fine-grained PAT** (Contents 권한). internal 은 `Read` 면 충분,
-  external/home 은 `Read and write`.
+- **호스트당 PAT 1개**면 충분 (repo 마다 따로 만들 필요 없음). GitHub PAT 1개로
+  obsidian-para + bookmarks-common 둘 다, GHES PAT 1개로 두 사내 repo 를 커버.
+  fine-grained 면 해당 repo 들을 모두 선택하고 **Contents** 권한을 켠다 — internal 은
+  `Read` 면 충분, external/home 은 `Read and write`.
   - ⚠️ **404 함정**: PAT 에 `Contents` 권한이 없으면 git 이 `403` 이 아니라
     `404 (repository not found)` 를 던진다. 반드시 `Contents` 를 켤 것.
 - **(internal 전용 전제)** GHES `obsidian-para` 레포에 `Bookmarks/` 가 든 `.gitignore`
@@ -64,14 +66,26 @@ PC 간 동기화한다.
 값을 채운다:
 
 ```bash
-OBSIDIAN_PARA_PAT="github_pat_…"      # obsidian-para 용 PAT
-BOOKMARKS_COMMON_PAT="github_pat_…"   # bookmarks-common(서브모듈) 용 PAT
+# GitHub(공용) — PAT 한 개로 obsidian-para + bookmarks-common 둘 다 접근.
+# fine-grained 면 두 repo 를 모두 선택 (Contents: internal=Read, external/home=Read/Write).
+GITHUB_PAT="github_pat_…"
 
-# internal 모드에서만 (둘 다 필수 — 없으면 실행 거부):
-OBSIDIAN_PARA_COMPANY_REMOTE="https://<user>:<ghes-pat>@<ghes-host>/<org>/obsidian-para.git"   # 사내 문서(80-Company/)
-BOOKMARKS_COMPANY_REMOTE="https://<user>:<ghes-pat>@<ghes-host>/<org>/bookmarks-company.git"   # 사내 북마크(80-Company/Bookmarks/)
+# internal 모드에서만 (셋 다 필수 — 없으면 실행 거부):
+# 사내 GHES 자격증명 — PAT 한 개로 obsidian-para + bookmarks-company 둘 다.
+# 스크립트가 아래 3개로 두 GHES remote URL 을 자동 조립한다 (karakeep-sync .env 의 GHES_* 와 동일 값).
+GHES_PAT="…"
+GHES_HOST="ghes.example.com"
+GHES_OWNER="my-org"
 CORP_CA="/path/to/corp-root-ca.pem"   # 사내 TLS 재서명 환경이면 (아니면 비움)
 ```
+
+> **키 발급은 호스트당 1개면 충분** — repo 마다 따로 만들 필요 없다. GitHub PAT 1개
+> (두 repo 선택) + GHES PAT 1개(두 repo 권한). GHES 값은 karakeep-sync `.env` 의
+> `GHES_PAT`/`GHES_HOST`/`GHES_OWNER` 와 같은 값을 그대로 쓰면 된다.
+>
+> 컴포넌트 대신 토큰 포함 전체 URL 을 직접 지정하려면 `OBSIDIAN_PARA_COMPANY_REMOTE` /
+> `BOOKMARKS_COMPANY_REMOTE` 를 채운다(있으면 우선). 구 변수 `OBSIDIAN_PARA_PAT` /
+> `BOOKMARKS_COMMON_PAT` 도 계속 지원되므로 기존 secrets.env 는 그대로 둬도 동작한다.
 
 > 이 파일은 git 에 절대 올리지 않는다(개인 PC 로컬 전용). 토큰은 여기 + 로컬
 > `.git/config` 에만 존재하고, 커밋되는 `.gitmodules` 는 항상 clean 하다.
