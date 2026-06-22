@@ -111,9 +111,14 @@ repos:
      `is_company` repo(`80-Company/Bookmarks`, GHES)로만 export 된다. per-repo `exclude_lists`
      설정이 누락돼도 공용 GitHub repo 로 새지 않으며, 사내 repo 가 없는 PC 에선 보류하고 경고한다.
      (`sync/karakeep_sync/cli.py` `_repo_accepts_bookmark` 가드레일)
-  2. **노트/문서(pre-sync 가드)**: `scripts/vault-sync.sh` 가 push 정책 적용 전에 공용
-     `obsidian-para` 에 `80-Company/` 가 추적(tracked)되고 있으면 동기화를 **거부**한다
-     (`.gitignore` 누락 시 유출 방지).
+  2. **노트/문서(pre-sync 가드)** — `scripts/vault-sync.sh` 가 동기화 전 두 가지를 검사한다:
+     - **작성 경계(주 방어)**: `internal` 모드에서 공용 작업트리에 `80-Company/`·북마크·
+       `.obsidian` *밖*의 변경/신규 파일이 있으면 = 사내 문서를 잘못된 폴더에 둔 것으로 보고
+       **에러로 거부**한다. internal 은 공용 repo pull-only + 작성은 `80-Company/`(GHES)에만
+       하므로, 그 밖의 변경은 정의상 오배치다(경로+모드만으로 판정 → 태그·내용 추측 불필요,
+       오탐 0). 의도된 변경이면 `--allow-outside`(또는 `ALLOW_OUTSIDE=1`)로 우회.
+     - **추적 방어(보조)**: 공용 `obsidian-para` 에 `80-Company/` 가 추적(tracked)되고 있으면
+       (`.gitignore` 누락 등) 동기화를 거부한다 — 폴더 통째 유출 방지.
 
 ## 5. 신규 PC 부트스트랩 (목표: 1-스크립트)
 

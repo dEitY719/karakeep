@@ -19,7 +19,13 @@
 # 사용법:
 #   ./vault-sync.sh            # 현재 모드대로 clone(최초) 또는 pull(이후)
 #   ./vault-sync.sh -h         # 도움말
+#   ./vault-sync.sh --allow-outside   # internal 에서 80-Company 밖 변경 경계검사 우회
 #   MODE=internal ./vault-sync.sh     # 모드 강제 (테스트용)
+#
+# 사내 경계(§4.3): internal 모드는 공용 obsidian-para 가 pull-only 이고, 작성은
+# 80-Company/(GHES)에만 한다. 동기화 전 공용 작업트리에 80-Company/·북마크·.obsidian
+# 밖의 변경/신규 파일이 보이면 = 사내 문서를 잘못된 폴더에 둔 것으로 보고 에러로 거부한다.
+# 의도된 변경이면 --allow-outside (또는 ALLOW_OUTSIDE=1) 로 우회.
 
 set -euo pipefail
 
@@ -33,8 +39,15 @@ MODE_FILE="${MODE_FILE:-$HOME/.dotfiles-setup-mode}"
 SECRETS="${VAULT_SECRETS:-$HOME/.config/obsidian-para/secrets.env}"
 NO_PUSH_SENTINEL="no-push://internal-is-pull-only"   # internal 에서 push 차단용 더미
 
-usage() { sed -n '2,30p' "$0"; exit 0; }
-[ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] && usage
+usage() { sed -n '2,29p' "$0"; exit 0; }
+ALLOW_OUTSIDE="${ALLOW_OUTSIDE:-0}"
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage ;;
+    --allow-outside) ALLOW_OUTSIDE=1 ;;
+    *) ;;
+  esac
+done
 
 log()  { printf '  %s\n' "$*"; }
 ok()   { printf '  ✅ %s\n' "$*"; }
@@ -129,6 +142,23 @@ if [ -n "$tracked_company" ]; then
        'git -C \"$VAULT_ROOT\" rm -r --cached $COMPANY_DIR' 로 추적을 해제한 뒤 다시 실행하세요."
 fi
 ok "사내 경계 OK ($COMPANY_DIR 는 공용 repo 에 미추적)"
+
+# ── 4c. internal 작성 경계 (§4.3): 사내 문서는 80-Company/ 아래에만 ──
+# internal 모드는 공용 repo pull-only + 작성은 80-Company/(GHES)에만. 그러므로 공용
+# 작업트리에서 80-Company/·북마크·.obsidian 상태 밖의 변경/신규 파일이 보이면 사내 문서를
+# 잘못된 폴더에 둔 것으로 보고 거부한다(태그·내용 추측 없이 경로+모드만으로 판정 → 오탐 0).
+if [ "$MODE" = "internal" ] && [ "$ALLOW_OUTSIDE" != "1" ]; then
+  outside="$(git -C "$VAULT_ROOT" status --porcelain --untracked-files=all \
+    -- ":(exclude)$COMPANY_DIR" ':(exclude)30-Resource/Bookmarks' ':(exclude).obsidian' \
+    2>/dev/null || true)"
+  if [ -n "$outside" ]; then
+    warn "internal 모드인데 공용 영역($COMPANY_DIR/ 밖)에 변경/신규 파일이 있습니다:"
+    printf '%s\n' "$outside" | sed 's/^/      /' >&2
+    die "사내 문서는 $COMPANY_DIR/ 아래에만 저장하세요. 공용 노트는 external/home PC 에서 작성합니다.
+         (의도된 변경이면 --allow-outside 또는 ALLOW_OUTSIDE=1 로 우회)"
+  fi
+  ok "internal 작성 경계 OK (공용 영역에 미작성)"
+fi
 
 # ── 5. 모드별 push 정책 ──────────────────────────────────────────────
 if [ "$MODE" = "internal" ]; then
