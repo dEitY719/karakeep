@@ -182,8 +182,11 @@ PC 간 공유되지만, 그 외 일반 노트(`10-Project`/`20-Area`/`30-Resourc
 안에서 중첩 repo 충돌을 피해야 한다:
 
 - `30-Resource/Bookmarks` (= `bookmarks-common`) → GitHub `obsidian-para` 의 **submodule**.
-  cron 이 HEAD 를 올려도 internal 은 pull-only 라 gitlink churn 이 무해하다. external/home 은
-  필요 시에만 gitlink 를 갱신(또는 무시).
+  cron 이 HEAD 를 올려도 internal 은 pull-only 라 gitlink churn 이 무해해 플레인
+  `submodule update`(gitlink 추종)로 재현성을 유지한다. external/home 은 karakeep-sync
+  cron 이 같은 폴더에 commit/push 하므로 `vault-sync.sh` 가 워킹트리를 옛 gitlink 로
+  되돌리면 churn/race 가 난다(#37) — 따라서 이미 클론돼 있으면 체크아웃을 생략하고
+  (워킹트리는 cron 소유), 최초 1회만 `--init` 으로 populate 한다.
 - `80-Company/Bookmarks` (= `bookmarks-company`, GHES) → GHES `obsidian-para` 안에서
   submodule 또는 gitignore + 별도 클론으로 둔다.
   - **전제**: GHES `obsidian-para` 의 `.gitignore` 에 `Bookmarks/` 를 **커밋**해 둬야 한다.
