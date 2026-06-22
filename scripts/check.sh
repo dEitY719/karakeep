@@ -56,6 +56,30 @@ if not cfg.vault_root.exists():
 for n, r in cfg.repos.items():
     ok(f"repo[{n}] push={r.push} pull={r.pull} include={r.include_lists or '-'} exclude={r.exclude_lists or '-'}")
 
+# ---------- 1b. company remote SSOT drift (issue #38) ----------
+# config.yaml(company) 과 vault-sync.sh §8 은 둘 다 80-Company/Bookmarks 의 GHES remote 를
+# 설정한다. 두 URL 이 다르면(특히 owner/host) 두 엔진이 매 실행 git remote set-url 로 번갈아
+# 덮어써 churn 이 난다. vault-sync.sh 는 GHES_HOST/GHES_OWNER 컴포넌트로 조립하므로, config 의
+# company remote 도 같은 host/owner 로 정규화되는지 검증한다(리터럴 박힘 → drift 조기 차단).
+import os
+from urllib.parse import urlparse
+head("1b. company remote SSOT (config.yaml ↔ vault-sync.sh, #38)")
+comp = cfg.repos.get("company")
+if comp is None:
+    ok("company repo 비활성 (이 모드/PC) — drift 점검 불필요")
+else:
+    env_host = os.environ.get("GHES_HOST", "")
+    env_owner = os.environ.get("GHES_OWNER", "")
+    u = urlparse(comp.remote)
+    r_host = u.hostname or ""
+    r_owner = u.path.lstrip("/").split("/")[0] if u.path else ""
+    if env_host and r_host != env_host:
+        bad(f"company remote host '{r_host}' ≠ GHES_HOST '{env_host}' — vault-sync.sh 와 drift. config.yaml 에서 ${{GHES_HOST}} 를 쓰세요 (#38)")
+    elif env_owner and r_owner != env_owner:
+        bad(f"company remote owner '{r_owner}' ≠ GHES_OWNER '{env_owner}' — vault-sync.sh 와 drift. config.yaml 에서 ${{GHES_OWNER}} 를 쓰세요 (#38)")
+    else:
+        ok(f"company remote 가 GHES_HOST/GHES_OWNER 와 일치 ({r_host}/{r_owner}) — churn 없음")
+
 # ---------- 2. Karakeep ----------
 head("2. Karakeep 연결/인증")
 client = bms = None

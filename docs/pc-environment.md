@@ -189,6 +189,12 @@ PC 간 공유되지만, 그 외 일반 노트(`10-Project`/`20-Area`/`30-Resourc
   - **전제**: GHES `obsidian-para` 의 `.gitignore` 에 `Bookmarks/` 를 **커밋**해 둬야 한다.
     `vault-sync.sh` 가 동기화 전 이를 검사하고, 빠져 있으면 거부한다(중첩 repo 추적·embed →
     유출/churn 방지). 빈 GHES obsidian-para 로 internal 을 처음 셋업할 때 흔히 놓치는 지점.
+  - **remote 단일 출처(#38)**: `80-Company/Bookmarks` 의 GHES remote 는 `vault-sync.sh` §8 과
+    `sync/config.yaml`(company) 두 곳이 모두 설정한다. 두 URL 이 다르면 매 실행 `git remote
+    set-url` 로 번갈아 덮어써 churn 이 생기므로, **둘 다 같은 컴포넌트**
+    (`GHES_PAT`/`GHES_HOST`/`GHES_OWNER` + repo 이름)에서 조립한다 — `config.yaml` 에 owner/host
+    를 리터럴로 박지 말 것. `scripts/check.sh` §1b 가 config 의 company remote 가
+    `GHES_HOST`/`GHES_OWNER` 와 일치하는지 검증해 drift 를 조기 차단한다.
 
 ### 6.4 검증 절차
 
