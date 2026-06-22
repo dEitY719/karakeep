@@ -186,6 +186,9 @@ PC 간 공유되지만, 그 외 일반 노트(`10-Project`/`20-Area`/`30-Resourc
   필요 시에만 gitlink 를 갱신(또는 무시).
 - `80-Company/Bookmarks` (= `bookmarks-company`, GHES) → GHES `obsidian-para` 안에서
   submodule 또는 gitignore + 별도 클론으로 둔다.
+  - **전제**: GHES `obsidian-para` 의 `.gitignore` 에 `Bookmarks/` 를 **커밋**해 둬야 한다.
+    `vault-sync.sh` 가 동기화 전 이를 검사하고, 빠져 있으면 거부한다(중첩 repo 추적·embed →
+    유출/churn 방지). 빈 GHES obsidian-para 로 internal 을 처음 셋업할 때 흔히 놓치는 지점.
 
 ### 6.4 검증 절차
 

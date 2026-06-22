@@ -53,6 +53,10 @@ PC 간 동기화한다.
   external/home 은 `Read and write`.
   - ⚠️ **404 함정**: PAT 에 `Contents` 권한이 없으면 git 이 `403` 이 아니라
     `404 (repository not found)` 를 던진다. 반드시 `Contents` 를 켤 것.
+- **(internal 전용 전제)** GHES `obsidian-para` 레포에 `Bookmarks/` 가 든 `.gitignore`
+  를 **먼저 커밋**해 둘 것. 사내 북마크(`80-Company/Bookmarks`)가 중첩 클론으로 들어가는데,
+  GHES obsidian-para 가 이를 ignore 하지 않으면 `vault-sync.sh` 가 §6.3 가드에서 **거부**한다
+  (최초 셋업이 7단계에서 멈춤 → 8단계 사내 북마크까지 진행 안 됨). 유출/churn 방지.
 
 ### 시크릿 설정 (최초 1회)
 
