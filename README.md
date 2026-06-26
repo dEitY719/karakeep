@@ -118,6 +118,30 @@ cron은 `init` 시 자동 등록됨 (30분마다 `auto` 실행). cron 라인은
 노트 동기화(`scripts/vault-sync.sh`)는 모드를 인지해 경로를 자동 탐지하고
 `internal` 은 pull-only 로 동작합니다. 상세 가이드: [scripts/README.md](scripts/README.md).
 
+## llm-wiki 연동
+
+`/llm-wiki` 스킬(Karpathy-style LLM-curated 지식 베이스)을 Obsidian vault 와
+연동합니다. 중앙 위키의 **canonical 위치**(모든 PC 공통, `<USERNAME>` 만 상이):
+
+    C:\Users\<USERNAME>\Documents\ObsidianVault-PARA\30_Resources\llm-wiki\
+    # WSL: /mnt/c/Users/<USERNAME>/Documents/ObsidianVault-PARA/30_Resources/llm-wiki/
+
+> ⚠️ underscore `30_Resources` 가 위키 경로입니다. 하이픈 `30-Resource/Bookmarks`
+> 는 별개의 Karakeep 북마크 서브모듈이며 위키와 무관합니다.
+
+각 프로젝트에서 위키를 찾도록, global `~/.claude/CLAUDE.md` 에 아래 한 줄을 둡니다
+(글로벌 설정 파일이라 이 repo 에 두지 않고 스니펫으로 제공 — `<USERNAME>` 만 교체):
+
+    llm-wiki location: C:\Users\<USERNAME>\Documents\ObsidianVault-PARA\30_Resources\llm-wiki\
+
+프로젝트 SCHEMA.md([docs/proposals/llm-wiki/SCHEMA.md](docs/proposals/llm-wiki/SCHEMA.md))를
+vault 로 배치하려면 — **external/home PC 에서만** (internal 은 쓰기 경계로 거부):
+
+    ./scripts/llm-wiki-deploy.sh
+
+멱등(재실행 안전)이며, vault 경로를 자동 탐지합니다. stub 생성·첫 ingest 는 이슈
+#42, 쓰기 경계 정책은 #44 를 참고하세요.
+
 ## 태그 체계 (권장)
 
     area/work        area/personal
