@@ -67,18 +67,90 @@ fi
 [ -d "$VAULT_ROOT" ] || die "vault 없음: $VAULT_ROOT (vault-sync.sh 를 먼저 실행했는지 확인)"
 log "vault: $VAULT_ROOT"
 
-# ── 3. 배치 (멱등) ───────────────────────────────────────────────────
+# ── 3. SCHEMA.md 배치 (멱등) ─────────────────────────────────────────
 # 정확한 대소문자로 생성한다. /mnt/c 는 case-insensitive 지만 git/WSL 은
 # case-sensitive 라 잘못된 표기는 phantom 디렉터리/case-only rename 을 만든다.
 DEST_DIR="$VAULT_ROOT/$WIKI_SUBPATH"
 DEST="$DEST_DIR/SCHEMA.md"
 
+mkdir -p "$DEST_DIR"
 if [ -f "$DEST" ] && cmp -s "$SRC" "$DEST"; then
-  ok "이미 최신 — 변경 없음 (멱등): $DEST"
-  exit 0
+  ok "SCHEMA.md 이미 최신 — 변경 없음 (멱등)"
+else
+  cp "$SRC" "$DEST"
+  ok "SCHEMA.md 배치 완료: $DEST"
 fi
 
-mkdir -p "$DEST_DIR"
-cp "$SRC" "$DEST"
-ok "배치 완료: $DEST"
-log "다음: stub(index.md·log.md·raw-sources/index.md) 생성 + 첫 ingest 는 #42 참조."
+# ── 4. stub 스캐폴딩 (없을 때만 — 누적 콘텐츠를 절대 덮어쓰지 않음) ──
+# 스킬은 위키가 없으면 SCHEMA.md + index.md + log.md + raw-sources/index.md
+# 4개 stub 을 첫 ingest 전에 만들라고 요구한다(SKILL.md L30). SCHEMA.md 는 위에서
+# 처리했고, 여기서 나머지 3개를 생성한다. 이 파일들은 ingest 가 내용을 누적하므로
+# 이미 있으면 손대지 않는다(멱등·clobber 금지).
+TODAY="$(date +%F)"   # KST 로컬
+
+scaffold() {  # <relative-path> <heredoc-content-on-stdin>
+  local rel="$1" path="$DEST_DIR/$1"
+  mkdir -p "$(dirname "$path")"
+  if [ -e "$path" ]; then
+    log "stub 존재 — 보존: $rel"
+  else
+    cat > "$path"
+    ok "stub 생성: $rel"
+  fi
+}
+
+scaffold "index.md" <<EOF
+---
+title: llm-wiki index
+type: reference
+updated: $TODAY
+sources: []
+---
+
+# llm-wiki — index
+
+컴파일된 모든 페이지를 정확히 1회 등록하는 카탈로그. ingest/compile 가 이 목록을
+갱신한다. (규칙은 SCHEMA.md, 동작은 스킬 SKILL.md.)
+
+<!-- 형식: - [<page>](<path>.md) — <한 줄 요약> -->
+EOF
+
+scaffold "log.md" <<EOF
+# llm-wiki — operation log
+
+쓰기를 동반하는 op 는 여기에 한 줄을 남긴다(단일 append-only 파일, per-day 디렉터리 아님).
+형식: \`## [YYYY-MM-DD] <op> | <title>\` + 필요 시 \`- Updated: <page>\`.
+조회: \`grep -n "^## \[" log.md\`.
+EOF
+
+scaffold "raw-sources/index.md" <<EOF
+---
+title: raw-sources registry
+type: reference
+updated: $TODAY
+sources: []
+---
+
+# raw-sources — registry
+
+모든 소스를 버킷별로 등록한다. 각 항목은 \`path | slug | topics\` 테이블 행.
+terse 하게 — 요약이 아니라 레지스트리다. (버킷 정의는 SCHEMA.md §Source buckets.)
+
+## articles
+| path | slug | topics |
+|------|------|--------|
+
+## conversations
+| path | slug | topics |
+|------|------|--------|
+
+## notes
+| path | slug | topics |
+|------|------|--------|
+
+## skills
+| path | slug | topics |
+|------|------|--------|
+EOF
+
+log "다음: 첫 ingest 1건 dogfooding (#42 운영 체크박스) — external/home PC."
