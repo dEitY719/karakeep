@@ -82,6 +82,30 @@ in sync and preserve this guardrail.
   `.env`); cron and `check.sh` instead `source` it directly. `${VAR}` in `config.yaml` is expanded
   by `config.py:_expand`, which **raises** on any unresolved variable rather than failing silently.
 
+## Inspecting live bookmark data (this repo has none)
+
+This checkout contains only code. The running Karakeep instance's SQLite DB lives in its
+deployment's `DATA_DIR` (docker volume). On the `external`-mode host that is the Karakeep
+deployment checkout's `data/` dir — e.g. `/home/bwyoon/para/project/karakeep/data/db.db`
+(`/home/bwyoon/para/project/karakeep-review-2` is a code-only review worktree with no data).
+
+To answer "what Lists / bookmarks exist?", query that DB directly — do **not** guess from code:
+
+```bash
+sqlite3 /home/bwyoon/para/project/karakeep/data/db.db \
+  "SELECT name, parentId, type FROM bookmarkLists;"        # Lists (folders), nested via parentId
+# membership: bookmarksInLists(bookmarkId, listId); bookmark rows in the bookmarks table.
+```
+
+### Classifying a new bookmark into a List
+
+Karakeep is operated **List-based** (folders), not free tags. Hard rule: the **`Company`** List
+(and its children) is the confidential boundary — its bookmarks go only to GHES `80-Company/`,
+never public GitHub. So never put public/personal links in `Company`. For a general dev resource
+that isn't language-specific, the catch-all dev List is `개발·SW엔지니어링` (vs. language-specific
+`Python` / `C++`, or `AI 도구`). A bookmark in a non-`Company` List flows out to
+`30-Resource/Bookmarks` and surfaces in Obsidian via its `lists:` frontmatter property.
+
 ## Module map (`sync/karakeep_sync/`)
 
 `cli.py` (commands + routing/guardrail), `karakeep.py` (REST client + list-path resolution),
