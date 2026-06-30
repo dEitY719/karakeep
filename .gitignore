@@ -2,6 +2,7 @@
 .env
 data/
 logs/
+.temp
 
 # machine-specific local overrides (corporate CA, proxy, etc. — never commit)
 docker-compose.override.yml
