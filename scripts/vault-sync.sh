@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vault-sync.sh — ObsidianVault-PARA git 동기화 (모드 인지 · 경로 자동탐지 · 멱등)
 #
-# 원칙 (docs/pc-environment.md SSOT):
+# 원칙 (docs/architecture/system/pc-environment.md SSOT):
 #   internal : GitHub(common)  = PULL ONLY  (push 절대 금지)
 #              GHES(company)    = read/write (80-Company 만)
 #   external : common read/write · company 비활성

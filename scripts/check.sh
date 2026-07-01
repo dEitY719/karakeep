@@ -9,7 +9,7 @@
 #   5) 로컬 clone 상태 (init 됐는지, md 몇 개인지)
 #
 # 모든 점검을 끝까지 돌리고(중간에 안 멈춤) 마지막에 FAIL/WARN 요약 + exit code.
-# SSOT: docs/pc-environment.md
+# SSOT: docs/architecture/system/pc-environment.md
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
