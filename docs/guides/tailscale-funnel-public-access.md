@@ -177,4 +177,4 @@ docker exec karakeep-tailscale-1 tailscale funnel status
 | 한참 뒤 funnel 끊김 | 노드 키 만료. admin에서 **Disable key expiry**(§4-5). |
 | `up`만 했는데 안 뜸 | `tailscale`은 profile `tunnel` — `--profile tunnel` 필요. |
 
-[corporate-tls-mitm]: ./pc-environment.md
+[corporate-tls-mitm]: ../architecture/system/pc-environment.md

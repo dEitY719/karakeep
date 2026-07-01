@@ -51,7 +51,7 @@ to see the rules:
   and the `company` repo (GHES) is the only writable target. The `company` repo entry is dropped
   from config entirely unless mode is `internal`.
 
-Topology SSOT: `docs/pc-environment.md`. Mode differences table: `README.md`.
+Topology SSOT: `docs/architecture/system/pc-environment.md`. Mode differences table: `README.md`.
 
 ### 2. The Company confidentiality guardrail (§4.3) — the critical invariant
 

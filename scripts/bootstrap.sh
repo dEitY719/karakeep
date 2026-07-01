@@ -9,7 +9,7 @@
 #   5) docker compose up + karakeep-sync init
 #
 # 멱등(idempotent): 이미 있는 것은 건너뛰고, 사용자 비밀(.env)은 덮어쓰지 않는다.
-# SSOT: docs/pc-environment.md
+# SSOT: docs/architecture/system/pc-environment.md
 set -euo pipefail
 
 # ---------- UX ----------
@@ -194,7 +194,7 @@ fi
 ok "PARA 골격 + 대시보드 준비"
 
 # 참고: 전체 vault 노트 동기화는 git(`obsidian-para`) 기반이다 — `scripts/vault-sync.sh`
-# 가 모드별 clone/pull + internal push 차단을 적용한다 (SSOT: docs/pc-environment.md §6).
+# 가 모드별 clone/pull + internal push 차단을 적용한다 (SSOT: docs/architecture/system/pc-environment.md §6).
 # (구 Syncthing `.stignore` 배치 단계는 폐기됨.)
 
 # ---------- 4. uv sync (venv + 설치) ----------
@@ -218,7 +218,7 @@ else
   # ⚠️ 공유 인스턴스 URL·사내 GHES owner 는 공개 repo 에 못 박지 않고 .env 변수로
   #    둔다(config.py 가 ${...} 를 런타임에 치환). config.yaml 자체도 gitignore 됨.
   {
-    echo "# bootstrap.sh 생성 (mode=$MODE) — 머신 로컬(gitignore). SSOT: docs/pc-environment.md"
+    echo "# bootstrap.sh 생성 (mode=$MODE) — 머신 로컬(gitignore). SSOT: docs/architecture/system/pc-environment.md"
     echo "karakeep:"
     if [ "$MODE" = external ]; then
       echo "  url: http://localhost:3001"
@@ -358,7 +358,7 @@ if [ "$AI" = ollama ]; then
   echo "  • 모델 준비: ollama pull $OLLAMA_MODEL"
 fi
 echo "  • Obsidian 에서 ObsidianVault-PARA 열기 → 커뮤니티 플러그인 켜기(제한모드 해제) → Ctrl+R"
-echo "  • 전체 vault 노트 동기화(git) — SSOT: docs/pc-environment.md §6:"
+echo "  • 전체 vault 노트 동기화(git) — SSOT: docs/architecture/system/pc-environment.md §6:"
 echo "      - scripts/vault-sync.sh 실행 → 공용 obsidian-para clone/pull (전 PC)"
 echo "      - 80-Company/ 는 공용 repo 에서 .gitignore 로 제외 (사내 노트 유출 방지)"
 if [ "$MODE" = internal ]; then

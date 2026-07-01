@@ -39,7 +39,7 @@ PC 에서 도는지**를 규칙으로 고정한다.
 글로벌 설정 파일이라 repo 에 두지 않는다. 아래를 붙여 둔다:
 
     # llm-wiki: 쓰기 op(ingest/lint/synthesis)는 external·home PC 에서만.
-    #           internal PC 는 read/query 전용 (vault-sync 경계 — 자세히: docs/llm-wiki-write-boundary.md)
+    #           internal PC 는 read/query 전용 (vault-sync 경계 — 자세히: docs/guides/llm-wiki-write-boundary.md)
 
 ## 검증 (internal PC 에서, 운영)
 
