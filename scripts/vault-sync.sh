@@ -56,6 +56,16 @@ warn() { printf '  ⚠️  %s\n' "$*" >&2; }
 die()  { printf '  ❌ %s\n' "$*" >&2; exit 1; }
 redact() { sed -E 's#(://[^:@/]+:)[^@/]+@#\1***@#g; s#(://)[^:@/]+@#\1***@#g; s/(gh[oprs]_|github_pat_)[A-Za-z0-9_]+/\1***/g'; }
 
+# https URL → SSH 형식(git@host:owner/path.git). user:pass@ / user@ / ${PAT}@ 자격증명은
+# 통째로 버린다(SSH 인증엔 PAT 불필요). 이미 git@/ssh:// 형식이면 그대로 출력한다.
+# 여기의 URL 은 항상 .git 로 끝나므로 별도 .git 처리는 필요 없다.
+to_ssh_url() {
+  case "$1" in
+    git@*|ssh://*) printf '%s\n' "$1" ;;
+    *) printf '%s\n' "$1" | sed -E 's#^https?://([^@/]*@)?([^/]+)/(.+)$#git@\2:\3#' ;;
+  esac
+}
+
 # 연결 리셋(사내 방화벽) 대비 재시도 래퍼
 git_retry() {
   local n=0 max=3
@@ -107,24 +117,36 @@ set -a
 # shellcheck disable=SC1090
 . "$SECRETS"
 set +a
+# transport 결정(secrets.env/환경에서 픽업, 기본 https). ssh 면 아래에서 모든 remote 를
+# git@ 형식으로 재작성하고 PAT 미설정을 치명 오류로 죽이지 않는다(SSH 인증엔 PAT 불필요).
+GIT_TRANSPORT="${GIT_TRANSPORT:-https}"
 # GitHub PAT: 단일 GITHUB_PAT 로 두 repo 공용. 구 per-repo 변수(OBSIDIAN_PARA_PAT/
 # BOOKMARKS_COMMON_PAT)가 있으면 그걸 우선 쓰고, 없으면 GITHUB_PAT 로 채운다(하위호환).
 : "${OBSIDIAN_PARA_PAT:=${GITHUB_PAT:-}}"
 : "${BOOKMARKS_COMMON_PAT:=${GITHUB_PAT:-${OBSIDIAN_PARA_PAT:-}}}"
-[ -n "${OBSIDIAN_PARA_PAT:-}" ]    || die "$SECRETS 에 GITHUB_PAT (또는 OBSIDIAN_PARA_PAT) 미설정"
-[ -n "${BOOKMARKS_COMMON_PAT:-}" ] || die "$SECRETS 에 GITHUB_PAT (또는 BOOKMARKS_COMMON_PAT) 미설정"
+# SSH transport 면 PAT 미설정을 치명 오류로 보지 않는다(SSH 키로 인증).
+[ "$GIT_TRANSPORT" = ssh ] || [ -n "${OBSIDIAN_PARA_PAT:-}" ]    || die "$SECRETS 에 GITHUB_PAT (또는 OBSIDIAN_PARA_PAT) 미설정"
+[ "$GIT_TRANSPORT" = ssh ] || [ -n "${BOOKMARKS_COMMON_PAT:-}" ] || die "$SECRETS 에 GITHUB_PAT (또는 BOOKMARKS_COMMON_PAT) 미설정"
 
 # internal 은 사내 영역(80-Company/) 쓰기가 핵심. GHES remote 를 컴포넌트(GHES_PAT/HOST/
 # OWNER)로 조립한다. 구 full-URL 변수가 직접 설정돼 있으면 그걸 우선(하위호환). 둘 다 없으면 거부.
 if [ "$MODE" = "internal" ]; then
-  if [ -n "${GHES_PAT:-}" ] && [ -n "${GHES_HOST:-}" ] && [ -n "${GHES_OWNER:-}" ]; then
-    : "${OBSIDIAN_PARA_COMPANY_REMOTE:=https://${GHES_PAT}@${GHES_HOST}/${GHES_OWNER}/${PARA_REPO}.git}"
-    : "${BOOKMARKS_COMPANY_REMOTE:=https://${GHES_PAT}@${GHES_HOST}/${GHES_OWNER}/${COMPANY_REPO}.git}"
+  # SSH transport 면 GHES_PAT 없이도 host/owner 만으로 remote 를 조립한다(빈 PAT →
+  # https://@host/... → to_ssh_url 이 자격증명 세그먼트를 제거). https 면 기존대로 PAT 필수.
+  if [ -n "${GHES_HOST:-}" ] && [ -n "${GHES_OWNER:-}" ] \
+     && { [ -n "${GHES_PAT:-}" ] || [ "$GIT_TRANSPORT" = ssh ]; }; then
+    : "${OBSIDIAN_PARA_COMPANY_REMOTE:=https://${GHES_PAT:-}@${GHES_HOST}/${GHES_OWNER}/${PARA_REPO}.git}"
+    : "${BOOKMARKS_COMPANY_REMOTE:=https://${GHES_PAT:-}@${GHES_HOST}/${GHES_OWNER}/${COMPANY_REPO}.git}"
   fi
   [ -n "${OBSIDIAN_PARA_COMPANY_REMOTE:-}" ] \
     || die "$SECRETS 에 GHES_PAT/GHES_HOST/GHES_OWNER (또는 OBSIDIAN_PARA_COMPANY_REMOTE) 미설정 (internal 사내 문서 동기화 필수)"
   [ -n "${BOOKMARKS_COMPANY_REMOTE:-}" ] \
     || die "$SECRETS 에 GHES_PAT/GHES_HOST/GHES_OWNER (또는 BOOKMARKS_COMPANY_REMOTE) 미설정 (internal 사내 북마크 등록 필수)"
+  # transport=ssh: 조립·직접지정 무관하게 company remote 를 git@ 형식으로 재작성.
+  if [ "$GIT_TRANSPORT" = ssh ]; then
+    OBSIDIAN_PARA_COMPANY_REMOTE="$(to_ssh_url "$OBSIDIAN_PARA_COMPANY_REMOTE")"
+    BOOKMARKS_COMPANY_REMOTE="$(to_ssh_url "$BOOKMARKS_COMPANY_REMOTE")"
+  fi
 fi
 
 # ── 2. Windows vault 경로 탐지 ───────────────────────────────────────
@@ -143,6 +165,13 @@ fi
 
 PARA_URL="https://${GH_OWNER}:${OBSIDIAN_PARA_PAT}@github.com/${GH_OWNER}/${PARA_REPO}.git"
 SUB_URL="https://${GH_OWNER}:${BOOKMARKS_COMMON_PAT}@github.com/${GH_OWNER}/${COMMON_REPO}.git"
+# transport=ssh: GitHub remote 도 git@ 형식으로 재작성(자격증명 제거). common repo 는
+# vault 의 submodule 이라 karakeep-sync 와 origin 을 공유 — 두 소비자가 같은 transport 를
+# 써야 매 실행 remote set-url 이 번갈아 덮어쓰는 churn 을 막는다.
+if [ "$GIT_TRANSPORT" = ssh ]; then
+  PARA_URL="$(to_ssh_url "$PARA_URL")"
+  SUB_URL="$(to_ssh_url "$SUB_URL")"
+fi
 
 # ── 4. obsidian-para clone(최초) 또는 pull(이후) ─────────────────────
 if [ -d "$VAULT_ROOT/.git" ]; then

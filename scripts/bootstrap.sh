@@ -256,17 +256,69 @@ fi
 
 # ---------- 6. .env ----------
 say "6/8 .env 스캐폴드"
+ENV_CREATED=0
 if [ -f "$REPO_ROOT/.env" ]; then
   ok ".env 이미 존재 → 유지"
 else
   cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env"
-  # 모드별로 실제 채워야 하는 비밀값만 안내한다.
+  ENV_CREATED=1
+fi
+
+# ---------- 6b. GIT_TRANSPORT 해소 (auto → ssh/https, 1회) ----------
+# 값: auto(기본)|ssh|https. ssh/https 로 이미 고정돼 있으면 존중하고 프로브 생략.
+# auto 면 repo host 별로 SSH 인증을 1회 프로브해 하나라도 성공하면 ssh, 아니면 https 로
+# 고정한다. config.py/cron 은 절대 프로브하지 않는다(결정적) — 오직 여기서만 해소한다.
+grep -q '^GIT_TRANSPORT=' "$REPO_ROOT/.env" || printf 'GIT_TRANSPORT=auto\n' >> "$REPO_ROOT/.env"
+GIT_TRANSPORT="$(grep '^GIT_TRANSPORT=' "$REPO_ROOT/.env" | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+[ -n "$GIT_TRANSPORT" ] || GIT_TRANSPORT=auto
+if [ "$GIT_TRANSPORT" = ssh ] || [ "$GIT_TRANSPORT" = https ]; then
+  ok "GIT_TRANSPORT=$GIT_TRANSPORT (고정값 존중 — 프로브 생략)"
+else
+  say "GIT_TRANSPORT=auto → SSH 인증 프로브"
+  # 항상 github.com, internal 이면 .env 의 GHES_HOST 도 프로브(있을 때만).
+  PROBE_HOSTS="github.com"
+  if [ "$MODE" = internal ]; then
+    GHES_HOST_ENV="$(grep '^GHES_HOST=' "$REPO_ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+    [ -n "$GHES_HOST_ENV" ] && PROBE_HOSTS="$PROBE_HOSTS $GHES_HOST_ENV"
+  fi
+  SSH_OK=0
+  for probe_host in $PROBE_HOSTS; do
+    # GitHub/GHES 는 인증 성공이어도 shell 이 없어 non-zero 로 끝난다. 성공 여부는
+    # exit code 가 아니라 배너 문구로 판정한다(성공 시 'successfully authenticated ...
+    # does not provide shell access'). 타임아웃/Permission denied/resolve 실패는 실패.
+    probe_out="$(ssh -T -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "git@$probe_host" 2>&1 || true)"
+    if printf '%s' "$probe_out" | grep -qiE 'success|authenticated|does not provide shell'; then
+      SSH_OK=1; ok "SSH 인증 성공: git@$probe_host"; break
+    else
+      warn "SSH 인증 안 됨: git@$probe_host"
+    fi
+  done
+  if [ "$SSH_OK" = 1 ]; then
+    GIT_TRANSPORT=ssh
+    tmp_env="$(mktemp)"; sed 's#^GIT_TRANSPORT=.*#GIT_TRANSPORT=ssh#' "$REPO_ROOT/.env" > "$tmp_env" && mv "$tmp_env" "$REPO_ROOT/.env"
+    ok "SSH 인증 성공 → GIT_TRANSPORT=ssh (PAT 불필요)"
+  else
+    GIT_TRANSPORT=https
+    tmp_env="$(mktemp)"; sed 's#^GIT_TRANSPORT=.*#GIT_TRANSPORT=https#' "$REPO_ROOT/.env" > "$tmp_env" && mv "$tmp_env" "$REPO_ROOT/.env"
+    warn "SSH 인증 실패 → GIT_TRANSPORT=https (기존처럼 PAT 필요)"
+  fi
+fi
+
+# 6c. .env 를 새로 만든 경우에만 채워야 할 비밀값을 안내한다.
+# PAT(GITHUB_PAT/GHES_PAT)는 transport=https 일 때만 필요 — ssh 면 목록에서 뺀다.
+# (GHES_HOST/GHES_OWNER 는 SSH remote 조립에도 쓰이므로 internal 이면 계속 필요.)
+if [ "$ENV_CREATED" = 1 ]; then
   NEED="KARAKEEP_API_KEY"
   [ "$SYNC_HOST" = 0 ] && NEED="NEXTAUTH_SECRET, $NEED"
   [ "$MODE" != external ] && NEED="$NEED, KARAKEEP_URL"
-  if [ "$MODE" = internal ]; then NEED="$NEED, GHES_PAT, GHES_HOST, GHES_OWNER"; else NEED="$NEED, GITHUB_PAT"; fi
+  if [ "$GIT_TRANSPORT" = https ]; then
+    if [ "$MODE" = internal ]; then NEED="$NEED, GHES_PAT, GHES_HOST, GHES_OWNER"; else NEED="$NEED, GITHUB_PAT"; fi
+  elif [ "$MODE" = internal ]; then
+    NEED="$NEED, GHES_HOST, GHES_OWNER"
+  fi
   warn ".env 생성됨 — 비밀값을 채우세요: $NEED"
 fi
+[ "$GIT_TRANSPORT" = ssh ] && ok "PAT 불필요 (SSH 사용) — ~/.ssh 키로 git 인증"
 
 # ---------- 7. docker-compose.override.yml (모드별) ----------
 say "7/8 docker override 생성 (모드: $MODE)"
