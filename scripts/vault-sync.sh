@@ -71,7 +71,9 @@ if [ -z "$MODE" ]; then
   [ -f "$MODE_FILE" ] || die "모드 파일 없음: $MODE_FILE (internal|external|home 중 하나를 적어주세요)"
   MODE="$(tr -d '[:space:]' < "$MODE_FILE")"
 fi
-case "$MODE" in internal|external|home) ;; *) die "잘못된 모드: '$MODE'" ;; esac
+# dotfiles 의 공용 PC 명칭 'public' 은 home 과 동일 동작 → home 으로 정규화 (home=public).
+[ "$MODE" = public ] && MODE=home
+case "$MODE" in internal|external|home) ;; *) die "잘못된 모드: '$MODE' (internal|external|home, 또는 home 별칭 public)" ;; esac
 log "모드: $MODE"
 
 # ── 1. 시크릿 로드 (없으면 템플릿 생성) ──────────────────────────────

@@ -14,11 +14,15 @@
 신규 PC(Windows+WSL)는 이 repo 를 clone 한 뒤 **`scripts/bootstrap.sh` 한 번**이면 됩니다.
 모드만 먼저 정해두면 나머지(vault 골격 · `uv sync` · `config.yaml` · `.env` · docker
 override · `karakeep-sync init`)는 스크립트가 모드에 맞춰 자동 처리합니다.
+**vault 골격은 Windows 사용자를 자동 탐지해 `C:\Users\<USERNAME>\Documents\ObsidianVault-PARA`
+(WSL: `/mnt/c/Users/<USERNAME>/Documents/ObsidianVault-PARA`)에 PARA 폴더 + `.obsidian`(Dataview)
++ 대시보드로 생성합니다** — 사용자명 하드코딩 없이 PC 마다 그대로 동작합니다.
 멱등(idempotent)이라 다시 돌려도 안전합니다. (SSOT: [docs/architecture/system/pc-environment.md](docs/architecture/system/pc-environment.md))
 
     # 1. 이 PC의 모드 지정 (한 번만)
     echo home > ~/.dotfiles-setup-mode          # internal | external | home 중 하나
     #   (또는 매 실행마다: ./scripts/bootstrap.sh --mode home)
+    #   dotfiles 가 쓰는 'public' 값도 그대로 허용됩니다 — home 의 별칭으로 처리.
 
     # 2. 부트스트랩 — 한 방에
     ./scripts/bootstrap.sh
@@ -42,7 +46,7 @@ override · `karakeep-sync init`)는 스크립트가 모드에 맞춰 자동 처
 |------|----------|---------------------------|----------------------------|
 | `external` | 로컬 컨테이너 **호스트** (docker ✓) | push/pull (생성·수정 담당) | — |
 | `internal` | 공유 인스턴스 **sync 클라이언트** (docker ✗) | **pull only** | push/pull |
-| `home` | 공유 인스턴스 **sync 클라이언트** (docker ✗) | push/pull | — |
+| `home` (=`public`) | 공유 인스턴스 **sync 클라이언트** (docker ✗) | push/pull | — |
 
 - **external** 만 Karakeep 컨테이너를 띄웁니다. `internal`/`home` 은 external 이 호스팅하는
   공유 인스턴스(`.env` 의 `KARAKEEP_URL`)에 붙는 순수 sync 클라이언트라 docker 가 필요 없습니다

@@ -31,7 +31,7 @@ usage() {
 사용법: scripts/bootstrap.sh [옵션]
 
 옵션:
-  --mode <internal|external|home>  PC 모드 강제 (기본: ~/.dotfiles-setup-mode 읽음)
+  --mode <internal|external|home>  PC 모드 강제 (기본: ~/.dotfiles-setup-mode 읽음. public=home 별칭)
   --sync-host                  docker 미실행 (순수 sync 클라이언트). external 외 모드는 자동 적용
   --ai <auto|ollama|none|URL>  AI 태깅 백엔드 (기본: auto = external→ollama, 그 외→none)
   --vault-parent <경로>         vault 부모 디렉토리 강제 (기본: <Windows홈>/Documents)
@@ -69,11 +69,15 @@ else
   die "모드를 결정할 수 없습니다 ($MODE_FILE 없음, --mode 옵션 없음).
     다음 중 하나로 지정하세요:
       (a) scripts/bootstrap.sh --mode <internal|external|home>
-      (b) echo <internal|external|home> > $MODE_FILE   # 셋 중 하나 골라 입력 후 재실행"
+      (b) echo <internal|external|home> > $MODE_FILE   # 셋 중 하나 골라 입력 후 재실행
+      (public 은 home 별칭으로 허용)"
 fi
+# dotfiles 는 공용 PC 를 'public' 으로 명명한다. karakeep 파이프라인에는 별도 public
+# 동작이 없고 home 과 완전히 동일하므로 여기서 home 으로 정규화한다 (home=public).
+[ "$MODE" = public ] && MODE=home
 case "$MODE" in
   internal|external|home) ;;
-  *) die "잘못된 모드 '$MODE' (출처: $MODE_SRC). internal|external|home 중 하나여야 합니다.";;
+  *) die "잘못된 모드 '$MODE' (출처: $MODE_SRC). internal|external|home(또는 home 별칭인 public) 중 하나여야 합니다.";;
 esac
 # docker 로 Karakeep 을 실제 띄우는 건 external(공유 인스턴스 호스트)뿐.
 # internal/home 은 공유 인스턴스를 바라보는 순수 sync 클라이언트 → docker 미실행.

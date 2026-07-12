@@ -4,9 +4,18 @@
 
 | 스크립트 | 용도 |
 |----------|------|
-| `bootstrap.sh` | 신규 PC 부트스트랩 (karakeep 파이프라인 + vault 골격 생성) |
+| `bootstrap.sh` | 신규 PC 부트스트랩 (karakeep 파이프라인 + Windows vault 생성) |
 | `check.sh` | 환경/설치 상태 점검 |
 | `vault-sync.sh` | **ObsidianVault-PARA 전체 git 동기화** (모드 인지 · 경로 자동탐지) |
+
+> `bootstrap.sh` 는 Windows 사용자를 자동 탐지해 vault 를
+> `C:\Users\<USERNAME>\Documents\ObsidianVault-PARA`
+> (WSL: `/mnt/c/Users/<USERNAME>/Documents/ObsidianVault-PARA`) 에 **생성**한다 —
+> PARA 골격 폴더 + `.obsidian/`(Dataview) + `Bookmarks Dashboard.md`. 사용자명을
+> 하드코딩하지 않으므로 PC 마다 그대로 동작하고, 부모 `Documents` 가 없으면
+> `--vault-parent <경로>` 로 지정한다. 상세 순서는
+> [docs/architecture/system/pc-environment.md](../docs/architecture/system/pc-environment.md) §5.
+> 모드 파일에 dotfiles 의 `public` 값이 들어 있어도 `home` 으로 처리한다.
 
 ---
 
@@ -30,7 +39,7 @@ PC 간 동기화한다.
 
 ### 동작 (멱등)
 
-1. 모드 결정 — `~/.dotfiles-setup-mode` (`internal` / `external` / `home`).
+1. 모드 결정 — `~/.dotfiles-setup-mode` (`internal` / `external` / `home`; dotfiles 의 `public` 은 `home` 별칭).
 2. **Windows vault 경로 자동 탐지** — `cmd.exe %USERPROFILE%` →
    `/mnt/c/Users/<winuser>/Documents/ObsidianVault-PARA`.
    사용자명을 하드코딩하지 않으므로 PC(`bwyoon` / `byoungwoo.yoon` / `msi-labtop`)마다
