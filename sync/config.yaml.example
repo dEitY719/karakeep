@@ -11,6 +11,9 @@ vault_root: /mnt/c/Users/CHANGE_ME/Documents/ObsidianVault-PARA
 # 생략 시 company repo 의 include_lists 에서 자동 유도된다(external/home 에서도 인지).
 company_lists: [Company]
 
+# remote 는 canonical HTTPS 형식으로 둔다. .env 의 GIT_TRANSPORT=ssh 면 config.py 가
+# 로드 시점에 자동으로 git@host:owner/repo.git 로 재작성하고 ${GITHUB_PAT}/${GHES_PAT}
+# 자격증명을 버린다 → PAT 없이 SSH 키로 인증(스키마 불변). auto/https 면 아래 그대로 사용.
 repos:
   # 공용 북마크 (GitHub) — 전 PC 공유. internal 모드에선 pull-only (push 금지).
   common:

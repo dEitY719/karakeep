@@ -41,6 +41,26 @@ class Config:
     company_lists: list[str] = field(default_factory=list)
 
 
+def _to_ssh(remote: str) -> str:
+    """HTTPS git remote 를 SSH 형식(git@host:path.git)으로 변환한다.
+
+    핵심: 변환은 반드시 _expand(치환) '이전'의 RAW 문자열에 적용한다. 그래야
+    ${GHES_HOST}/${GHES_OWNER} 처럼 내부에 '/'·'@' 가 없는 변수가 host/path 안에
+    그대로 보존된 채 나중에 _expand 로 정상 확장된다. 또한 SSH 형식은 자격증명
+    (`${GITHUB_PAT}@`)을 통째로 버리므로 PAT 미설정 시에도 _expand 가 raise 하지
+    않는다 — SSH 인증엔 PAT 가 필요 없기 때문이다.
+
+    이미 `git@`/`ssh://` 형식이거나 매칭에 실패하면 원본을 그대로 반환한다.
+    """
+    if remote.startswith("git@") or remote.startswith("ssh://"):
+        return remote
+    m = re.match(r"^https?://(?:[^@/]*@)?([^/]+)/(.+?)(?:\.git)?/?$", remote)
+    if not m:
+        return remote
+    host, path = m.group(1), m.group(2)
+    return f"git@{host}:{path}.git"
+
+
 def _expand(value: str) -> str:
     """${VAR} 를 환경변수로 치환한다.
 
@@ -75,6 +95,11 @@ def load_config(
     is_work = mode_file.read_text().strip() == "internal"
     vault_root = Path(_expand(raw["vault_root"])).expanduser()
 
+    # transport 는 1회만 읽는다 (config.py 는 네트워크 프로브를 하지 않는다).
+    # 'ssh' 일 때만 remote 를 git@ 형식으로 재작성하고, 그 외(unset/auto/https/미지의
+    # 값)는 HTTPS 원본을 유지한다 → 완전 하위호환. auto→ssh/https 해소는 bootstrap 담당.
+    transport = os.environ.get("GIT_TRANSPORT", "https").strip().lower()
+
     raw_repos = raw.get("repos", {})
 
     # 사내 리스트(§4.3): 명시 top-level company_lists 우선, 없으면 company repo 의
@@ -92,9 +117,12 @@ def load_config(
         push_allowed = True
         if name == "common" and is_work:
             push_allowed = False
+        repo_remote_raw = repo_raw["remote"]
+        if transport == "ssh":
+            repo_remote_raw = _to_ssh(repo_remote_raw)
         repos[name] = RepoConfig(
             path=vault_root / repo_raw["path"],
-            remote=_expand(repo_raw["remote"]),
+            remote=_expand(repo_remote_raw),
             push=push_allowed,
             pull=repo_raw.get("pull", True),
             exclude_lists=repo_raw.get("exclude_lists", []),

@@ -297,7 +297,16 @@ def init() -> None:
 
     for repo_name, repo in config.repos.items():
         if repo.path.exists():
-            click.echo(f"[{repo_name}] Already exists: {repo.path}")
+            # 이미 clone 된 repo 도 origin 을 '해소된 transport'(config.py 가 GIT_TRANSPORT
+            # 에 따라 이미 https/ssh 로 재작성한 repo.remote)로 멱등 재조정한다 → auto→ssh
+            # 전환이 기존 clone 에도 실제로 적용된다.
+            click.echo(f"[{repo_name}] Already exists → origin 재조정: {repo.remote}")
+            r = subprocess.run(
+                ["git", "remote", "set-url", "origin", repo.remote],
+                cwd=repo.path, check=False,
+            )
+            if r.returncode != 0:
+                click.echo(f"[{repo_name}] ⚠️  origin 재조정 실패 (수동 확인 필요)")
             continue
         click.echo(f"[{repo_name}] Cloning {repo.remote} → {repo.path}")
         repo.path.parent.mkdir(parents=True, exist_ok=True)
