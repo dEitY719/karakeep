@@ -128,3 +128,8 @@ create folders or attach bookmarks, call the Karakeep REST API directly — base
 - The `30_Resources/llm-wiki/` path (underscore) is the LLM-wiki and is unrelated to the
   `30-Resource/Bookmarks` (hyphen) Karakeep submodule — see README "llm-wiki 연동".
 - Docs are written in Korean; match that when editing `docs/` and `README.md`.
+
+## Changelog
+
+- On completing a user-visible, operational, schema, deployment, or non-obvious behavior change, update `docs/public/changelog.md` (or note why an entry is unnecessary). Format: `- 변경: **summary**` under a `## YYYY-MM-DD` header.
+- This changelog is collected by the daily/weekly report hub (my-share) to generate reports.
