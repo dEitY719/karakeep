@@ -157,8 +157,9 @@ docker exec karakeep-tailscale-1 tailscale funnel status
 | 켜기 | `docker compose --profile tunnel up -d tailscale` |
 | URL 확인 | `docker exec karakeep-tailscale-1 tailscale funnel status` |
 | 리셋 후 | 자동 복구(restart 정책 + state 볼륨) — 같은 URL |
+| 호스트(컨테이너를 띄운 PC) 자체 접속 | Funnel URL을 거치지 말고 `http://localhost:3001` 직접 사용 — 사내망 DNS가 `*.ts.net`을 막아도 영향 없음(§9). `sync/config.yaml`의 `karakeep.url`도 이미 `localhost`로 고정돼 있어 karakeep-sync CLI는 애초에 이 문제와 무관하다. |
 
-5대 PC는 이제 각자 띄우지 말고 **이 URL을 북마크**해 단일 인스턴스를 공유한다.
+5대 PC는 이제 각자 띄우지 말고 **이 URL을 북마크**해 단일 인스턴스를 공유한다(단, 호스트 PC 자신은 위 로컬 접속 사용).
 
 ## 8. 보안 메모
 
@@ -176,5 +177,6 @@ docker exec karakeep-tailscale-1 tailscale funnel status
 | 컨트롤플레인 `x509` 실패 | `SSL_CERT_FILE`에 사내 CA 결합 번들 누락(§5.1). |
 | 한참 뒤 funnel 끊김 | 노드 키 만료. admin에서 **Disable key expiry**(§4-5). |
 | `up`만 했는데 안 뜸 | `tailscale`은 profile `tunnel` — `--profile tunnel` 필요. |
+| 브라우저 `DNS_PROBE_STARTED` (특정 네트워크에서만) | 서버(컨테이너)는 정상인데 접속 기기가 물린 네트워크의 DNS가 `*.ts.net`을 NXDOMAIN 처리하는 경우가 있음(사내망 DNS 필터가 VPN/터널 도메인을 차단하는 정책 등). `docker exec <tailscale컨테이너> tailscale status`/`funnel status`로 서버 정상부터 확인. **WSL/호스트 재시작으로는 해결 안 됨** — 원인이 클라이언트 쪽 네트워크의 DNS이므로, 그 네트워크를 벗어나거나(모바일 핫스팟 등) 다른 네트워크에서 얻은 IP를 hosts 파일에 고정해야 함. **단, 접속 기기가 호스트 자신이면** §7의 `http://localhost:3001`로 바로 접속하면 그만이라 이 문제 자체를 피해간다. |
 
 [corporate-tls-mitm]: ../architecture/system/pc-environment.md
