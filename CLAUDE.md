@@ -129,7 +129,9 @@ create folders or attach bookmarks, call the Karakeep REST API directly — base
   `30-Resource/Bookmarks` (hyphen) Karakeep submodule — see README "llm-wiki 연동".
 - Docs are written in Korean; match that when editing `docs/` and `README.md`.
 
-## Changelog
+<!-- my-share:changelog:begin -->
+## 변경 기록 (changelog)
 
-- On completing a user-visible, operational, schema, deployment, or non-obvious behavior change, update `docs/public/changelog.md` (or note why an entry is unnecessary). Format: `- 변경: **summary**` under a `## YYYY-MM-DD` header.
-- This changelog is collected by the daily/weekly report hub (my-share) to generate reports.
+- 현재 OFF. changelog 를 갱신하지 않는다(허브 수집 일시 중단).
+- 재활성화는 my-share 에서 `python3 scripts/changelog_toggle.py on`.
+<!-- my-share:changelog:end -->
