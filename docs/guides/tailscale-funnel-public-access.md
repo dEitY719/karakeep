@@ -176,7 +176,7 @@ docker exec karakeep-tailscale-1 tailscale funnel status
 | `karakeep:3000` connection refused | 컨테이너 `hostname: karakeep` 충돌. `TS_HOSTNAME`만 쓰고 `hostname:` 제거(§5.3). |
 | 컨트롤플레인 `x509` 실패 | `SSL_CERT_FILE`에 사내 CA 결합 번들 누락(§5.1). |
 | 한참 뒤 funnel 끊김 | 노드 키 만료. admin에서 **Disable key expiry**(§4-5). |
-| `up`만 했는데 안 뜸 | `tailscale`은 profile `tunnel` — `--profile tunnel` 필요. 재부팅/WSL 재생성 후 평범한 `docker compose up -d`만 하면 funnel이 꺼진 채로 남는다 — 아래 NXDOMAIN 장애의 **재발 주원인**. |
+| `up`만 했는데 안 뜸 | `tailscale`은 profile `tunnel` — `--profile tunnel` 필요. 명시적 stop 후이거나 WSL 재생성으로 컨테이너가 재생성된 뒤 평범한 `docker compose up -d`만 하면 funnel이 꺼진 채로 남는다 — 아래 NXDOMAIN 장애의 **재발 주원인**. |
 | 외부/사내망에서 `NXDOMAIN` 또는 프록시 `502 notresolvable` (tailnet 멤버에서는 정상) | Funnel이 꺼져 호스트명이 공개 DNS에서 빠지고 MagicDNS 전용이 된 상태. [Funnel 복구 Runbook](funnel-recovery-runbook.md) 순서대로 복구. |
 | 브라우저 `DNS_PROBE_STARTED` (특정 네트워크에서만) | 서버(컨테이너)는 정상인데 접속 기기가 물린 네트워크의 DNS가 `*.ts.net`을 NXDOMAIN 처리하는 경우가 있음(사내망 DNS 필터가 VPN/터널 도메인을 차단하는 정책 등). `docker exec <tailscale컨테이너> tailscale status`/`funnel status`로 서버 정상부터 확인. **WSL/호스트 재시작으로는 해결 안 됨** — 원인이 클라이언트 쪽 네트워크의 DNS이므로, 그 네트워크를 벗어나거나(모바일 핫스팟 등) 다른 네트워크에서 얻은 IP를 hosts 파일에 고정해야 함. **단, 접속 기기가 호스트 자신이면** §7의 `http://localhost:3001`로 바로 접속하면 그만이라 이 문제 자체를 피해간다. |
 
