@@ -4,19 +4,14 @@
 SYNC := sync
 
 .DEFAULT_GOAL := help
-.PHONY: help setup build run test up down clear clean
+.PHONY: help setup test up down clear clean
 
 help: ## 이 도움말
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
+# 사내 프록시 CA 는 시스템 저장소에만 있어 --system-certs 필요
 setup: ## 최초 1회: 의존성 설치
-	cd $(SYNC) && uv $(SYNC)
-
-build: ## 빌드 단계 없음(no-op)
-	@echo "빌드 단계 없음"
-
-run: ## 실행 명령 없음(no-op) -- 직접 채운다
-	@echo "실행 명령 없음 -- Makefile 의 run 을 채운다"
+	cd $(SYNC) && uv sync --system-certs
 
 test: ## 단위 테스트
 	cd $(SYNC) && mise run test
