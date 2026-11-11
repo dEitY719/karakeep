@@ -14,7 +14,7 @@ internal PC 에서 접속 불가(`NXDOMAIN` / proxy `502 notresolvable`)가 발�
 - **Funnel 비활성 시 호스트명은 공개 DNS(ts.net 권한 NS)에서 사라지고 MagicDNS(tailnet 내부) 전용으로 돌아간다.**
   그래서 tailnet 멤버(external PC)에서는 "정상"이고, 그 외 모든 망(사내 포함)에서는 존재하지 않는 주소가 된다.
 - **재발 트리거**: funnel 컨테이너가 `profile: tunnel` 이라 **평범한 `docker compose up -d` 만으로는 기동되지 않는다.**
-  재부팅/WSL 재생성 후 이 케이스가 반복된다.
+  `restart: unless-stopped` 는 명시적 `stop` 후이거나 컨테이너가 재생성된 경우(WSL 재생성 등)에는 복구해 주지 않는다.
 - 2차 문제: internal cron(sync)이 사내 proxy env 없이 direct egress 를 시도해 방화벽 RST 가 났다
   (internal PC 에서 수정 완료).
 
@@ -29,9 +29,6 @@ curl -sS "https://dns.google/resolve?name=karakeep.<tailnet>.ts.net&type=A"
   [funnel 가이드 §9 트러블슈팅 표](tailscale-funnel-public-access.md#9-트러블슈팅) 참고.
 
 ## 1. 컨테이너 재기동 — 가장 흔한 원인
-
-funnel 컨테이너는 `profile: tunnel` 이라 **평범한 `docker compose up -d` 로는 안 뜬다.**
-재부팅/WSL 재생성 후 이 케이스가 반복된다.
 
 ```bash
 cd <karakeep repo>                     # external PC 의 karakeep clone 위치
@@ -56,7 +53,8 @@ docker logs --tail 50 karakeep-tailscale-1
 ## 3. 종단 검증
 
 ```bash
-# external PC 자체 (tailnet 내부가 아닌 공개 경로 확인)
+# external PC 는 tailnet 멤버라 MagicDNS 로 풀린다 — 컨테이너 정상 여부만 보여줄 뿐 공개 경로는 증명하지 않는다.
+# 공개 경로는 §0 의 dns.google 조회(Answer 에 IP 복귀)와 아래 internal PC 확인으로 판정한다.
 curl -sSL https://karakeep.<tailnet>.ts.net        # → 200, /signin, <title>Karakeep</title>
 docker exec karakeep-tailscale-1 tailscale funnel status
 ```
@@ -64,7 +62,8 @@ docker exec karakeep-tailscale-1 tailscale funnel status
 그 다음 **internal PC** 에서:
 
 ```bash
-# 사내 프록시 경유로 200/401 이면 끝. (502 notresolvable = 아직 DNS 미전파, 수 분 대기)
+set -a; . ~/.config/karakeep/proxy.env; . <karakeep repo>/.env; set +a
+curl -sS -o /dev/null -w '%{http_code}\n' "$NEXTAUTH_URL"   # 200/401 이면 끝. 502 notresolvable = 아직 DNS 미전파, 수 분 대기
 ```
 
 cron 은 다음 정각/30분 실행에 자동 회복된다. 즉시 확인하려면 internal PC 에서:
@@ -79,9 +78,9 @@ set -a; . ~/.config/karakeep/proxy.env; . <karakeep repo>/.env; set +a
 | 증상 | 조치 |
 |------|------|
 | `Funnel on` 로그는 있는데 공개 DNS 여전히 NXDOMAIN | 수 분 대기(DNS 전파). 그래도 안 되면 admin → DNS → MagicDNS ON + **Enable HTTPS** 확인 |
-| 공개 URL `Connection reset` | 백엔드 프록시 실패 — `karakeep:3000` 도달 확인. 컨테이너 `hostname: karakeep` 충돌 아닌지 확인 |
+| 공개 URL `Connection reset` | 백엔드 프록시 실패(`karakeep:3000` connection refused) — 컨테이너 `hostname: karakeep` 충돌 아닌지 확인 |
 | 컨트롤플레인 `x509` 실패 | `SSL_CERT_FILE` 사내 CA 결합 번들 누락 |
-| 사내 프록시가 ts.net 자체를 차단 | 같은 ts.net 도메인(login.tailscale.com)이 통과 실적이 있으므로 드물다. 발생 시 SR 등록 또는 Cloudflare Tunnel 선회 |
+| 사내 프록시가 ts.net 자체를 차단 | 같은 tailscale 계열 도메인(login.tailscale.com)이 통과 실적이 있으므로 드물다. 발생 시 SR 등록 또는 Cloudflare Tunnel 선회 |
 
 ## 체크리스트
 
