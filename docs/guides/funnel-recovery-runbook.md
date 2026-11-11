@@ -64,12 +64,7 @@ docker exec karakeep-tailscale-1 tailscale funnel status
 ```bash
 set -a; . ~/.config/karakeep/proxy.env; . <karakeep repo>/.env; set +a
 curl -sS -o /dev/null -w '%{http_code}\n' "$NEXTAUTH_URL"   # 200/401 이면 끝. 502 notresolvable = 아직 DNS 미전파, 수 분 대기
-```
-
-cron 은 다음 정각/30분 실행에 자동 회복된다. 즉시 확인하려면 internal PC 에서:
-
-```bash
-set -a; . ~/.config/karakeep/proxy.env; . <karakeep repo>/.env; set +a
+# (선택) cron 은 다음 정각/30분 실행에 자동 회복된다. 즉시 확인하려면 같은 셸에서:
 <karakeep repo>/sync/.venv/bin/karakeep-sync auto
 ```
 
